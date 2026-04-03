@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>電気系統図 要件判定チェックツール</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- ====== HEADER ====== -->
+  <header class="header">
+    <div class="header-inner">
+      <div class="header-logo">
+        <span class="header-icon">&#9889;</span>
+        <div>
+          <h1 class="header-title">電気系統図 要件判定チェックツール</h1>
+          <span class="header-badge">NeV EV充電インフラ補助金 申請図面チェック</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- ====== MAIN ====== -->
+  <main class="main">
+    <!-- STEP 1: API Key -->
+    <section class="card" id="step-apikey">
+      <div class="card-header">
+        <span class="step-num">1</span>
+        <h2 class="card-title">Gemini APIキー</h2>
+      </div>
+      <div class="card-body">
+        <p class="card-desc">Google AI StudioでGemini APIキーを取得し、入力してください。キーはブラウザにのみ保存され、外部送信されません。</p>
+        <div class="apikey-input-row">
+          <div class="input-wrapper">
+            <input type="password" id="apiKeyInput" class="input-field" placeholder="AIza...">
+            <button type="button" id="apiKeyToggle" class="btn-icon" title="表示/非表示">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="model-selector">
+          <p class="model-label">AIモデル選択:</p>
+          <div class="model-cards">
+            <label class="model-card">
+              <input type="radio" name="model" value="gemini-2.5-pro">
+              <div class="model-card-inner">
+                <span class="model-name">Gemini 2.5 Pro</span>
+                <span class="model-desc">最高精度 / 低速</span>
+              </div>
+            </label>
+            <label class="model-card">
+              <input type="radio" name="model" value="gemini-2.5-flash" checked>
+              <div class="model-card-inner">
+                <span class="model-name">Gemini 2.5 Flash</span>
+                <span class="model-desc">推奨 / 高速・高精度</span>
+              </div>
+            </label>
+            <label class="model-card">
+              <input type="radio" name="model" value="gemini-2.0-flash">
+              <div class="model-card-inner">
+                <span class="model-name">Gemini 2.0 Flash</span>
+                <span class="model-desc">最速 / 標準精度</span>
+              </div>
+            </label>
+          </div>
+        </div>
+        <div class="apikey-actions">
+          <label class="checkbox-label">
+            <input type="checkbox" id="saveKeyCheck" checked>
+            <span>APIキーをブラウザに保存</span>
+          </label>
+          <button type="button" id="testApiBtn" class="btn btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            接続テスト
+          </button>
+        </div>
+        <div id="apiKeyStatus" class="status-message" style="display:none;"></div>
+      </div>
+    </section>
+
+    <!-- STEP 2: Type Selection -->
+    <section class="card" id="step-type">
+      <div class="card-header">
+        <span class="step-num">2</span>
+        <h2 class="card-title">図面種別の選択</h2>
+      </div>
+      <div class="card-body">
+        <p class="card-desc">チェック対象の電気系統図の種別を選択してください。種別により判定基準が異なります。</p>
+        <div class="type-selector">
+          <button type="button" class="type-card" data-type="mokutekichi">
+            <div class="type-icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/><path d="M3 9h18"/></svg>
+            </div>
+            <span class="type-name">目的地充電</span>
+            <span class="type-desc">商業施設・ホテル・ゴルフ場等<br>6kW / 9.6kW</span>
+          </button>
+          <button type="button" class="type-card" data-type="kiso">
+            <div class="type-icon">
+              <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>
+            </div>
+            <span class="type-name">基礎充電</span>
+            <span class="type-desc">マンション・集合住宅等<br>3kW</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 3: File Upload -->
+    <section class="card" id="step-upload">
+      <div class="card-header">
+        <span class="step-num">3</span>
+        <h2 class="card-title">図面アップロード</h2>
+      </div>
+      <div class="card-body">
+        <p class="card-desc">チェック対象の電気系統図（PDF）をアップロードしてください。最大20MBまで。</p>
+        <div class="upload-area" id="uploadArea">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" class="upload-icon"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <p class="upload-text">ここにPDFをドラッグ&ドロップ</p>
+          <p class="upload-sub">または</p>
+          <label class="btn btn-secondary upload-btn">
+            ファイルを選択
+            <input type="file" id="fileInput" accept=".pdf" hidden>
+          </label>
+        </div>
+        <div id="fileInfo" class="file-info" style="display:none;">
+          <div class="file-info-row">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            <span id="fileName"></span>
+            <span id="fileSize" class="file-size"></span>
+            <button type="button" id="fileClear" class="btn-icon btn-danger-icon" title="削除">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            </button>
+          </div>
+          <div id="pdfPreview" class="pdf-preview"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 4: Execute -->
+    <section class="card" id="step-execute">
+      <div class="card-header">
+        <span class="step-num">4</span>
+        <h2 class="card-title">チェック実行</h2>
+      </div>
+      <div class="card-body">
+        <p class="card-desc" id="executeDesc">全てのステップを完了してからチェックを実行してください。</p>
+        <button type="button" id="executeBtn" class="btn btn-primary btn-large" disabled>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          チェック実行
+        </button>
+      </div>
+    </section>
+
+    <!-- Loading -->
+    <section class="card loading-section" id="loadingSection" style="display:none;">
+      <div class="card-body loading-body">
+        <div class="spinner"></div>
+        <p class="loading-text" id="loadingText">図面を解析中です...</p>
+        <p class="loading-sub">Gemini APIで高精度な読み取りを行っています。しばらくお待ちください。</p>
+      </div>
+    </section>
+
+    <!-- Error -->
+    <section class="card error-section" id="errorSection" style="display:none;">
+      <div class="card-body">
+        <div class="error-content">
+          <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          <h3 class="error-title" id="errorTitle">エラーが発生しました</h3>
+          <p class="error-message" id="errorMessage"></p>
+          <button type="button" id="retryBtn" class="btn btn-secondary">再試行</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- STEP 5: Results -->
+    <section class="card result-section" id="resultSection" style="display:none;">
+      <div class="card-header">
+        <span class="step-num">5</span>
+        <h2 class="card-title">判定結果</h2>
+      </div>
+      <div class="card-body">
+        <!-- Overall badges -->
+        <div class="overall-badges" id="overallBadges"></div>
+
+        <!-- Detected info -->
+        <div class="detected-info-section">
+          <h3 class="section-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            検出情報
+          </h3>
+          <div class="detected-grid" id="detectedGrid"></div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="result-tabs">
+          <button type="button" class="tab-btn active" data-tab="nev">
+            NeV要件判定
+            <span class="tab-badge" id="nevTabBadge"></span>
+          </button>
+          <button type="button" class="tab-btn" data-tab="manual">
+            作図センターマニュアル判定
+            <span class="tab-badge" id="manualTabBadge"></span>
+          </button>
+        </div>
+
+        <!-- NeV Tab Content -->
+        <div class="tab-content active" id="tab-nev">
+          <div id="nevResults"></div>
+        </div>
+
+        <!-- Manual Tab Content -->
+        <div class="tab-content" id="tab-manual">
+          <div id="manualResults"></div>
+        </div>
+
+        <!-- AI Comment -->
+        <div class="ai-comment-section" id="aiCommentSection" style="display:none;">
+          <h3 class="section-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+            AI所見
+          </h3>
+          <div class="ai-comment" id="aiComment"></div>
+        </div>
+
+        <!-- Cost Estimate -->
+        <div class="cost-section" id="costSection" style="display:none;">
+          <span class="cost-label">API利用料金（推定）:</span>
+          <span class="cost-value" id="costValue"></span>
+        </div>
+
+        <!-- Actions -->
+        <div class="result-actions">
+          <button type="button" id="copyBtn" class="btn btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+            結果をコピー
+          </button>
+          <button type="button" id="newCheckBtn" class="btn btn-secondary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>
+            新規チェック
+          </button>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ====== FOOTER ====== -->
+  <footer class="footer">
+    <p>&copy; 2026 電気系統図 要件判定チェックツール</p>
+    <p class="footer-note">本ツールは判定補助を目的としており、最終判断は担当者が行ってください。</p>
+  </footer>
+
+  <!-- Scripts -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  </script>
+  <script src="js/checker.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
