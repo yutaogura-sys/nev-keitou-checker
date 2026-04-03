@@ -488,7 +488,11 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       // Try to extract JSON from markdown code block
       const match = text.match(/```(?:json)?\s*([\s\S]*?)```/);
       if (match) {
-        parsed = JSON.parse(match[1].trim());
+        try {
+          parsed = JSON.parse(match[1].trim());
+        } catch {
+          throw new Error('JSON_PARSE_ERROR');
+        }
       } else {
         throw new Error('JSON_PARSE_ERROR');
       }
@@ -520,6 +524,8 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     };
   }
 
+  const VALID_STATUSES = ['pass', 'fail', 'warn', 'na'];
+
   function aggregateResults(results, checks) {
     const categories = {};
     for (const check of checks) {
@@ -527,9 +533,11 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       if (!categories[catKey]) {
         categories[catKey] = { items: [], pass: 0, fail: 0, warn: 0, na: 0 };
       }
-      const r = results[check.id] || { status: 'warn', finding: '未判定' };
+      const raw = results[check.id] || { status: 'warn', finding: '未判定' };
+      const status = VALID_STATUSES.includes(raw.status) ? raw.status : 'warn';
+      const r = { ...raw, status };
       categories[catKey].items.push({ ...check, ...r });
-      categories[catKey][r.status] = (categories[catKey][r.status] || 0) + 1;
+      categories[catKey][status] += 1;
     }
 
     // Overall status

@@ -228,6 +228,14 @@ document.addEventListener('DOMContentLoaded', () => {
   retryBtn.addEventListener('click', runCheck);
 
   async function runCheck() {
+    if (!state.apiKey || !state.selectedType || !state.file) {
+      showError(new Error('APIキー、図面種別、PDFファイルを全て設定してください。'));
+      return;
+    }
+
+    // Disable button during execution
+    executeBtn.disabled = true;
+
     // Hide previous results
     resultSection.style.display = 'none';
     errorSection.style.display = 'none';
@@ -266,7 +274,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     } catch (e) {
       loadingSection.style.display = 'none';
-      showError(e);
+      if (e instanceof TypeError && e.message.includes('fetch')) {
+        showError(new Error('ネットワーク接続を確認してください。インターネットに接続されていない可能性があります。'));
+      } else {
+        showError(e);
+      }
+    } finally {
+      updateExecuteBtn();
     }
   }
 
@@ -306,6 +320,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Detected info
     const info = result.detected_info || {};
+    const chargerInfo = [info.charger_type, info.charger_maker, info.charger_model].filter(Boolean).join(' ');
     detectedGrid.innerHTML = [
       detectedItem('図面名称', info.drawing_title),
       detectedItem('設置場所', info.facility_name),
@@ -313,7 +328,7 @@ document.addEventListener('DOMContentLoaded', () => {
       detectedItem('作成日', info.creation_date),
       detectedItem('縮尺', info.scale),
       detectedItem('配電方法', info.power_distribution),
-      detectedItem('充電設備', `${info.charger_type || ''} ${info.charger_maker || ''} ${info.charger_model || ''}`),
+      detectedItem('充電設備', chargerInfo),
       detectedItem('台数', info.charger_count),
       detectedItem('色分け', info.color_usage),
       detectedItem('既設充電設備', info.has_existing_equipment),
@@ -347,16 +362,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Scroll to results
     resultSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-
-    // Bind category toggles
-    $$('.category-header').forEach((header) => {
-      header.addEventListener('click', () => {
-        const group = header.closest('.category-group');
-        group.classList.toggle('open');
-        const items = group.querySelector('.category-items');
-        items.classList.toggle('collapsed');
-      });
-    });
   }
 
   function statusLabel(status) {
@@ -366,9 +371,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function detectedItem(label, value) {
+    const display = value && String(value).trim() ? escapeHtml(String(value).trim()) : '未検出';
     return `<div class="detected-item">
-      <span class="detected-item-label">${label}</span>
-      <span class="detected-item-value">${value || '未検出'}</span>
+      <span class="detected-item-label">${escapeHtml(label)}</span>
+      <span class="detected-item-value">${display}</span>
     </div>`;
   }
 
@@ -430,6 +436,19 @@ document.addEventListener('DOMContentLoaded', () => {
     div.textContent = str;
     return div.innerHTML;
   }
+
+  /* ----------------------------------------------------------
+   *  CATEGORY TOGGLE (event delegation)
+   * ---------------------------------------------------------- */
+  document.addEventListener('click', (e) => {
+    const header = e.target.closest('.category-header');
+    if (!header) return;
+    const group = header.closest('.category-group');
+    if (!group) return;
+    group.classList.toggle('open');
+    const items = group.querySelector('.category-items');
+    if (items) items.classList.toggle('collapsed');
+  });
 
   /* ----------------------------------------------------------
    *  TABS
