@@ -443,7 +443,6 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       contents: [{ parts }],
       generationConfig: {
         temperature: 0.1,
-        responseMimeType: 'application/json',
         maxOutputTokens: maxTokens,
       },
     };
