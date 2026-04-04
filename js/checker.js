@@ -393,12 +393,13 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       canvas.width = Math.floor(scaledViewport.width);
       canvas.height = Math.floor(scaledViewport.height);
       const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas 2Dコンテキストを取得できませんでした');
 
       await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
       const jpeg = canvas.toDataURL('image/jpeg', 0.92);
       images.push({
         pageNumber: i,
-        data: jpeg.split(',')[1],
+        data: jpeg.split(',')[1] || '',
         mimeType: 'image/jpeg',
       });
     }

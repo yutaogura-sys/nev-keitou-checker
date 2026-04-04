@@ -106,9 +106,11 @@ document.addEventListener('DOMContentLoaded', () => {
       } else {
         state.apiKeyVerified = true;
         showStatus(`接続成功 - ${state.selectedModel} が利用可能です。`, 'success');
-        if (saveKeyCheck.checked) {
-          localStorage.setItem('nev_keitou_apikey', state.apiKey);
-        }
+        try {
+          if (saveKeyCheck.checked) {
+            localStorage.setItem('nev_keitou_apikey', state.apiKey);
+          }
+        } catch { /* quota exceeded */ }
       }
     } catch (e) {
       showStatus('接続失敗: ' + e.message, 'error');
@@ -353,9 +355,9 @@ document.addEventListener('DOMContentLoaded', () => {
     manualResults.innerHTML = renderCategoryResults(manualAgg, 'manual');
 
     // AI Comment
-    if (result.ai_comment) {
+    if (result.ai_comment?.trim()) {
       aiCommentSection.style.display = 'block';
-      aiComment.textContent = result.ai_comment;
+      aiComment.textContent = result.ai_comment.trim();
     } else {
       aiCommentSection.style.display = 'none';
     }
@@ -409,15 +411,15 @@ document.addEventListener('DOMContentLoaded', () => {
       if (cat.fail > 0) summaryParts.push(`<span class="cat-fail">${cat.fail} Fail</span>`);
       if (cat.warn > 0) summaryParts.push(`<span class="cat-warn">${cat.warn} Warn</span>`);
 
-      const itemsHtml = cat.items.map((item) => {
+      const itemsHtml = (cat.items || []).map((item) => {
         const icon = statusIcon(item.status);
         const condHtml = item.condition
-          ? `<span class="check-condition">${item.condition}</span>`
+          ? `<span class="check-condition">${escapeHtml(item.condition)}</span>`
           : '';
         return `<div class="check-item">
           <span class="check-status ${item.status}">${icon}</span>
           <div class="check-body">
-            <div class="check-label">${item.label}</div>
+            <div class="check-label">${escapeHtml(item.label)}</div>
             <div class="check-finding">${escapeHtml(item.finding || '')}</div>
             ${condHtml}
           </div>
@@ -432,7 +434,7 @@ document.addEventListener('DOMContentLoaded', () => {
       return `<div class="category-group ${openClass}">
         <div class="category-header">
           <span class="category-icon">${meta.icon}</span>
-          <span class="category-title">${meta.title}</span>
+          <span class="category-title">${escapeHtml(meta.title)}</span>
           <div class="category-summary">${summaryParts.join('')}</div>
           <svg class="category-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
