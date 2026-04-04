@@ -52,7 +52,10 @@ document.addEventListener('DOMContentLoaded', () => {
   const aiCommentSection = $('#aiCommentSection');
   const aiComment = $('#aiComment');
   const costSection = $('#costSection');
-  const costValue = $('#costValue');
+  const costModel = $('#costModel');
+  const costInput = $('#costInput');
+  const costOutput = $('#costOutput');
+  const costTotal = $('#costTotal');
   const copyBtn = $('#copyBtn');
   const newCheckBtn = $('#newCheckBtn');
   const tabBtns = $$('.tab-btn');
@@ -267,7 +270,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // 5. Render
       loadingSection.style.display = 'none';
-      renderResults(result, nevAgg, manualAgg, cost);
+      renderResults(result, nevAgg, manualAgg, cost, usage, state.selectedModel);
 
       // Store for export
       lastResult = { type: state.selectedType, detected: result.detected_info, nevAgg, manualAgg, aiComment: result.ai_comment };
@@ -304,7 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----------------------------------------------------------
    *  RENDER RESULTS
    * ---------------------------------------------------------- */
-  function renderResults(result, nevAgg, manualAgg, cost) {
+  function renderResults(result, nevAgg, manualAgg, cost, usage, modelId) {
     resultSection.style.display = 'block';
 
     // Overall badges
@@ -358,9 +361,20 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Cost
-    if (cost) {
-      costSection.style.display = 'flex';
-      costValue.textContent = `$${cost.totalCost} (入力: $${cost.inputCost} / 出力: $${cost.outputCost})`;
+    if (cost && usage) {
+      costSection.style.display = 'block';
+      const modelNames = {
+        'gemini-2.5-pro': 'Gemini 2.5 Pro',
+        'gemini-2.5-flash': 'Gemini 2.5 Flash',
+        'gemini-2.0-flash': 'Gemini 2.0 Flash',
+      };
+      const yenRate = 150;
+      const totalUsd = parseFloat(cost.totalCost);
+      const yenEstimate = Math.round(totalUsd * yenRate * 10) / 10;
+      costModel.textContent = modelNames[modelId] || modelId;
+      costInput.textContent = `${usage.promptTokens.toLocaleString()} tokens（$${cost.inputCost}）`;
+      costOutput.textContent = `${usage.completionTokens.toLocaleString()} tokens（$${cost.outputCost}）`;
+      costTotal.textContent = `$${cost.totalCost}（約 ${yenEstimate}円）`;
     }
 
     // Scroll to results

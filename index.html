@@ -96,7 +96,7 @@
               <svg width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M3 21h18"/><path d="M5 21V7l7-4 7 4v14"/><path d="M9 21v-6h6v6"/></svg>
             </div>
             <span class="type-name">基礎充電</span>
-            <span class="type-desc">マンション・集合住宅等<br>3kW</span>
+            <span class="type-desc">マンション・集合住宅等<br>6kW</span>
           </button>
           <button type="button" class="type-card" data-type="mokutekichi">
             <div class="type-icon">
@@ -218,18 +218,35 @@
         </div>
 
         <!-- AI Comment -->
-        <div class="ai-comment-section" id="aiCommentSection" style="display:none;">
-          <h3 class="section-title">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-            AI所見
-          </h3>
+        <div class="ai-comment-section card" id="aiCommentSection" style="display:none;">
+          <h3 class="ai-comment-title">🤖 AI 総合コメント</h3>
           <div class="ai-comment" id="aiComment"></div>
         </div>
 
         <!-- Cost Estimate -->
-        <div class="cost-section" id="costSection" style="display:none;">
-          <span class="cost-label">API利用料金（推定）:</span>
-          <span class="cost-value" id="costValue"></span>
+        <div class="cost-card card" id="costSection" style="display:none;">
+          <div class="cost-header">
+            <h3 class="cost-title">💰 Gemini API 料金目安（税別）</h3>
+            <span class="cost-note">※ 概算値です。実際の請求額とは異なる場合があります</span>
+          </div>
+          <div class="cost-details">
+            <div class="cost-row">
+              <span class="cost-label">モデル</span>
+              <span class="cost-value" id="costModel"></span>
+            </div>
+            <div class="cost-row">
+              <span class="cost-label">入力トークン</span>
+              <span class="cost-value" id="costInput"></span>
+            </div>
+            <div class="cost-row">
+              <span class="cost-label">出力トークン</span>
+              <span class="cost-value" id="costOutput"></span>
+            </div>
+            <div class="cost-row cost-row-total">
+              <span class="cost-label">合計（概算）</span>
+              <span class="cost-value cost-total" id="costTotal"></span>
+            </div>
+          </div>
         </div>
 
         <!-- Actions -->
