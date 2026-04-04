@@ -286,9 +286,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   function showError(error) {
     errorSection.style.display = 'block';
-    if (error.message === 'API_QUOTA_EXCEEDED') {
+    if (error.message.startsWith('API_QUOTA_EXCEEDED')) {
+      const isPro = error.message.includes('2.5-pro');
       $('#errorTitle').textContent = 'APIクォータ超過';
-      errorMessage.textContent = 'Gemini APIの利用制限に達しました。しばらく待ってから再試行するか、有料プランにアップグレードしてください。';
+      errorMessage.textContent = isPro
+        ? 'Gemini 2.5 Pro は有料プランのAPIキーが必要です。無料APIキーをご利用の場合は、Flashモデルを選択してください。'
+        : 'Gemini APIの利用制限に達しました。しばらく待ってから再試行するか、有料プランにアップグレードしてください。';
     } else if (error.message === 'JSON_PARSE_ERROR') {
       $('#errorTitle').textContent = '応答解析エラー';
       errorMessage.textContent = 'AIの応答をJSON形式で解析できませんでした。再試行してください。';

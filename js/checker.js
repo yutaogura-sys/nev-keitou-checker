@@ -459,7 +459,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       if (resp.status === 429) {
-        throw new Error('API_QUOTA_EXCEEDED');
+        throw new Error('API_QUOTA_EXCEEDED:' + modelId);
       }
       throw new Error(err.error?.message || `API Error: ${resp.status}`);
     }
