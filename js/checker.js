@@ -408,7 +408,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
    * ---------------------------------------------------------- */
   async function testApiKey(apiKey) {
     const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models?key=${apiKey}`
+      `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
     );
     if (!resp.ok) throw new Error('APIキーが無効です');
     return true;
@@ -416,7 +416,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
 
   async function checkModelAvailability(apiKey, modelId) {
     const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/${modelId}?key=${apiKey}`
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelId}?key=${apiKey}`
     );
     return resp.ok;
   }
@@ -449,7 +449,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     };
 
     const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1/models/${modelId}:generateContent?key=${apiKey}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
