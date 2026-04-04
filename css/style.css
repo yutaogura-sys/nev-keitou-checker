@@ -278,6 +278,12 @@ body {
   color: var(--gray-500);
   margin-top: 2px;
 }
+.model-note {
+  font-size: 11px;
+  color: var(--gray-500);
+  margin-top: 8px;
+  text-align: center;
+}
 
 /* --- API Key Actions --- */
 .apikey-actions {

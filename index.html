@@ -45,6 +45,13 @@
           <p class="model-label">AIモデル選択:</p>
           <div class="model-cards">
             <label class="model-card">
+              <input type="radio" name="model" value="gemini-2.5-pro">
+              <div class="model-card-inner">
+                <span class="model-name">Gemini 2.5 Pro</span>
+                <span class="model-desc">最高精度 / 低速（有料プラン推奨）</span>
+              </div>
+            </label>
+            <label class="model-card">
               <input type="radio" name="model" value="gemini-2.5-flash" checked>
               <div class="model-card-inner">
                 <span class="model-name">Gemini 2.5 Flash</span>
@@ -59,6 +66,7 @@
               </div>
             </label>
           </div>
+          <p class="model-note">※ 無料APIキーの場合、Proモデルはクォータ制限によりエラーになる場合があります。</p>
         </div>
         <div class="apikey-actions">
           <label class="checkbox-label">
