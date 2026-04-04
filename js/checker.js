@@ -559,7 +559,6 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
    *  7. COST ESTIMATION
    * ---------------------------------------------------------- */
   const MODEL_PRICING = {
-    'gemini-2.5-pro':   { input: 1.25, output: 10.0 },
     'gemini-2.5-flash': { input: 0.15, output: 0.60 },
     'gemini-2.0-flash': { input: 0.10, output: 0.40 },
   };
