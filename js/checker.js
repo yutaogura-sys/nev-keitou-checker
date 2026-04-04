@@ -122,10 +122,11 @@ const DrawingChecker = (() => {
     { id: 'man_k_power_type', category: 'man_equip', label: '配電方法の記載（例：1Φ3W100/200V）', detail: '受電方式が記載されていること。' },
     { id: 'man_k_panel_name', category: 'man_panel', label: '盤名称（制御盤含む）が配線ルート図と一致', detail: '電源盤・分電盤・制御盤の名称が配線ルート図と一致していること。' },
 
-    { id: 'man_k_cable_count', category: 'man_cable', label: '配線種類が台数に応じた正しい仕様', detail: '1-15台:CVT22sq、16-20台:CVT38sqであること。' },
-    { id: 'man_k_main_breaker', category: 'man_breaker', label: '主幹ブレーカーが台数に応じた正しい容量', detail: '1-10台:50AT、11-15台:75AT、16-20台:100ATであること。' },
-    { id: 'man_k_branch_breaker', category: 'man_breaker', label: '分岐ブレーカーの仕様・容量', detail: '分岐ブレーカーの仕様と容量が正しいこと（例：ELB 2P2E 30AF/20AT、1盤構成は30AF/20AT、2盤構成は50AF/20AT）。' },
-    { id: 'man_k_ground', category: 'man_ground', label: '接地の記載（接地種別・接地線）', detail: '接地種別（ED等）、接地線（IV5.5sq）が記載されていること。' },
+    { id: 'man_k_cable_count', category: 'man_cable', label: '幹線・分岐配線が台数に応じた正しい仕様', detail: '6kW仕様: 幹線は台数に応じて選定（1-2台:CV8sq-3C、2台LBなし:CVT22sq、3-5台:CVT38sq、5台:CVT60sq、6台以上:CVT100sq）。分岐配線は全構成共通でCV8sq-3C。' },
+    { id: 'man_k_main_breaker', category: 'man_breaker', label: '主幹ブレーカーが台数に応じた正しい容量', detail: '6kW仕様: 1-2台(LBなし):50-100AT、2台(LBなし):100AF/75AT、3-5台:100AF/100AT、4台:150AF/125AT、5台:150AF/150AT、6台:225AF/200AT、7台:250AF/225AT。' },
+    { id: 'man_k_branch_breaker', category: 'man_breaker', label: '分岐ブレーカーの仕様・容量', detail: '分岐ブレーカーの仕様と容量が正しいこと。ELB 3P2E、一面構成:30AF/20AT、二面構成:50AF/20AT。' },
+    { id: 'man_k_lb_rule', category: 'man_demand', label: 'LB（ロードバランシング）設計の適用', detail: '3台以上の案件は全てLB（ロードバランシング）設計が必須。LBの有無に応じた配線・ブレーカー仕様が正しいこと。' },
+    { id: 'man_k_ground', category: 'man_ground', label: '接地の記載（接地種別・接地線）', detail: '接地種別（ED等）と接地線が台数に応じた正しい仕様であること。1-2台:IV5.5sq、3-5台:IV8sq、6台以上:IV14sq。' },
 
     { id: 'man_k_demand_note', category: 'man_demand', label: 'デマンドコントロール注記の記載', detail: '「※デマンドコントロール機能 充電器同時利用で分電盤主幹ブレーカー容量を超える場合、一時的に充電出力を制御する」の注記が記載されていること。' },
     { id: 'man_k_new_panel', category: 'man_panel', label: '新設盤のメーカー名・型式の記載', detail: '新設分電盤・電源盤のメーカー名（日東工業等）と型式（OR16-57C等）が記載されていること。' },
@@ -264,9 +265,24 @@ ${isKiso ? `### 基礎充電（6kW）固有のマニュアル要件
 - 作成者 = 「ENECHANGE EVラボ株式会社」
 - 縮尺 = 「A3:1/100」
 - 同時運転台数の正確性（1-10台:2台同時、11-15台:3台同時、16-20台:4台同時）
-- 配線種類が台数に応じた正しい仕様（1-15台:CVT22sq、16-20台:CVT38sq）
-- 主幹ブレーカーが台数に応じた正しい容量（1-10台:50AT、11-15台:75AT、16-20台:100AT）
-- 分岐ブレーカーの仕様（1盤:ELB 2P2E 30AF/20AT、2盤:50AF/20AT）
+- **LBルール**: 3台以上の案件は全てLB（ロードバランシング）設計が必須
+- **幹線ケーブル**（6kW仕様・台数別）:
+  - 1-2台(LBなし): CV8sq-3C
+  - 2台(LBなし): CVT22sq
+  - 3-5台: CVT38sq
+  - 5台: CVT60sq
+  - 6台以上: CVT100sq
+- **分岐配線**: 全構成共通 CV8sq-3C
+- **主幹ブレーカー**（6kW仕様・台数別）:
+  - 1-2台(LBなし): 50-100AT
+  - 2台(LBなし): 100AF/75AT
+  - 3-5台: 100AF/100AT
+  - 4台: 150AF/125AT
+  - 5台: 150AF/150AT
+  - 6台: 225AF/200AT
+  - 7台: 250AF/225AT
+- 分岐ブレーカーの仕様: ELB 3P2E（一面構成:30AF/20AT、二面構成:50AF/20AT）
+- **接地線**（台数別）: 1-2台:IV5.5sq、3-5台:IV8sq、6台以上:IV14sq
 - 新設盤のメーカー名・型式の記載（例：日東工業 OR16-57C）
 - デマンドコントロール注記の記載
 - 「各ブレーカーにおいて、必要な電気容量確保確認済み」注記
