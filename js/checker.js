@@ -73,14 +73,14 @@ const DrawingChecker = (() => {
     { id: 'nev_transformer', category: 'nev_power_source', label: '変圧器容量の記載', detail: '高圧受変電設備の場合、変圧器の容量が記載されていること。', condition: '高圧受変電設備の場合' },
 
     // 新規契約
-    { id: 'nev_new_contract', category: 'nev_power_source', label: '新規契約機器のメーカー名・型式', detail: '特別措置等で新規契約する場合、引込開閉器等のメーカー名と型式が記載されていること。', condition: '新規で電力契約する場合' },
+    { id: 'nev_new_contract', category: 'nev_power_source', label: '新設分電盤のメーカー名・型式', detail: '新設分電盤がある場合、メーカー名と型式が記載されていること。', condition: '新設分電盤がある場合' },
   ];
 
   // --- 作図センターマニュアル判定（目的地 6kW/9.6kW） ---
   const MANUAL_MOKUTEKICHI_CHECKS = [
     { id: 'man_m_location', category: 'man_basic', label: '設置場所 = 施設正式名称 + 普通充電設備設置工事', detail: '設置場所欄に「施設正式名称 + 普通充電設備設置工事」と記載されていること。' },
     { id: 'man_m_title', category: 'man_basic', label: '図面名称 = 「電気系統図」', detail: '図面名称が「電気系統図」であること。既設の場合は「既設電気系統図」。' },
-    { id: 'man_m_author', category: 'man_basic', label: '作成者 = 「ENECHANGE EVラボ株式会社」', detail: '作成者が「ENECHANGE EVラボ株式会社」であること。' },
+    { id: 'man_m_author', category: 'man_basic', label: '作成者の記載', detail: '作成者名が記載されていること（例：ENECHANGE EVラボ株式会社、株式会社ストアソリューションズ等）。記載があればpass。' },
     { id: 'man_m_scale', category: 'man_basic', label: '縮尺 = 「-」', detail: '目的地の電気系統図では縮尺が「-」であること。' },
     { id: 'man_m_date', category: 'man_basic', label: '作成日 = ミラエネ指定日', detail: '作成日が所定の日付であること。' },
 
@@ -113,7 +113,7 @@ const DrawingChecker = (() => {
   const MANUAL_KISO_CHECKS = [
     { id: 'man_k_location', category: 'man_basic', label: '設置場所 = 施設正式名称 + 普通充電設備設置工事', detail: '設置場所欄に「施設正式名称 + 普通充電設備設置工事」と記載されていること。' },
     { id: 'man_k_title', category: 'man_basic', label: '図面名称 = 「電気系統図」', detail: '図面名称が「電気系統図」であること。既設の場合は「既設電気系統図」。' },
-    { id: 'man_k_author', category: 'man_basic', label: '作成者 = 「ENECHANGE EVラボ株式会社」', detail: '作成者が「ENECHANGE EVラボ株式会社」であること。' },
+    { id: 'man_k_author', category: 'man_basic', label: '作成者の記載', detail: '作成者名が記載されていること（例：ENECHANGE EVラボ株式会社、株式会社ストアソリューションズ等）。記載があればpass。' },
     { id: 'man_k_scale', category: 'man_basic', label: '縮尺 = 「A3:1/100」', detail: '基礎の電気系統図では縮尺が「A3:1/100」であること。' },
     { id: 'man_k_date', category: 'man_basic', label: '作成日 = ミラエネ指定日', detail: '作成日が所定の日付であること。' },
 
@@ -263,7 +263,7 @@ NeV要件とは細部が異なる社内基準です。
 ${isKiso ? `### 基礎充電（6kW）固有のマニュアル要件
 - 設置場所 = 「施設正式名称 + 普通充電設備設置工事」
 - 図面名称 = 「電気系統図」
-- 作成者 = 「ENECHANGE EVラボ株式会社」
+- 作成者名の記載があること（記載があればpass）
 - 縮尺 = 「A3:1/100」
 - 同時運転台数の正確性（1-10台:2台同時、11-15台:3台同時、16-20台:4台同時）
 - **LBルール**: 3台以上の案件は全てLB（ロードバランシング）設計が必須
@@ -307,7 +307,7 @@ ${isKiso ? `### 基礎充電（6kW）固有のマニュアル要件
 - 補助金対象外部分の適切な表記` : `### 目的地充電（6kW/9.6kW）固有のマニュアル要件
 - 設置場所 = 「施設正式名称 + 普通充電設備設置工事」
 - 図面名称 = 「電気系統図」
-- 作成者 = 「ENECHANGE EVラボ株式会社」
+- 作成者名の記載があること（記載があればpass）
 - 縮尺 = 「-」（ノンスケール）
 - 配電方法の記載
 - 盤名称が配線ルート図と一致
