@@ -386,9 +386,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function statusLabel(status) {
-    if (status === 'pass') return 'PASS';
-    if (status === 'fail') return 'FAIL';
-    return 'WARN';
+    if (status === 'pass') return '合格';
+    if (status === 'fail') return '不合格';
+    return '要確認';
   }
 
   function detectedItem(label, value) {
@@ -409,9 +409,9 @@ document.addEventListener('DOMContentLoaded', () => {
       if (!meta) return '';
 
       const summaryParts = [];
-      if (cat.pass > 0) summaryParts.push(`<span class="cat-pass">${cat.pass} Pass</span>`);
-      if (cat.fail > 0) summaryParts.push(`<span class="cat-fail">${cat.fail} Fail</span>`);
-      if (cat.warn > 0) summaryParts.push(`<span class="cat-warn">${cat.warn} Warn</span>`);
+      if (cat.pass > 0) summaryParts.push(`<span class="cat-pass">${cat.pass} 合格</span>`);
+      if (cat.fail > 0) summaryParts.push(`<span class="cat-fail">${cat.fail} 不合格</span>`);
+      if (cat.warn > 0) summaryParts.push(`<span class="cat-warn">${cat.warn} 要確認</span>`);
 
       const itemsHtml = (cat.items || []).map((item) => {
         const icon = statusIcon(item.status);
