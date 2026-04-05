@@ -338,6 +338,8 @@ document.addEventListener('DOMContentLoaded', () => {
       detectedItem('配電方法', info.power_distribution),
       detectedItem('充電設備', chargerInfo),
       detectedItem('台数', info.charger_count),
+      detectedItem('主幹AT', info.main_breaker_at ? info.main_breaker_at + 'AT' : null),
+      detectedItem('デマンド制御', info.has_demand_control),
       detectedItem('色分け', info.color_usage),
       detectedItem('既設充電設備', info.has_existing_equipment),
     ].join('');
