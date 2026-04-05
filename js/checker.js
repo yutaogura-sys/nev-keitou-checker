@@ -435,6 +435,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     canvas.width = Math.floor(viewport.width);
     canvas.height = Math.floor(viewport.height);
     const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error('Canvas 2Dコンテキストを取得できませんでした');
     await page.render({ canvasContext: ctx, viewport }).promise;
     return canvas.toDataURL('image/jpeg', 0.8);
   }

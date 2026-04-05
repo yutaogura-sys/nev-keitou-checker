@@ -190,7 +190,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // Preview
     try {
       const preview = await DrawingChecker.pdfToPreview(file);
-      pdfPreview.innerHTML = `<img src="${preview}" alt="PDF Preview">`;
+      const img = document.createElement('img');
+      img.src = preview;
+      img.alt = 'PDF Preview';
+      pdfPreview.textContent = '';
+      pdfPreview.appendChild(img);
     } catch {
       pdfPreview.innerHTML = '<p style="padding:20px;color:var(--gray-400);">プレビューを生成できませんでした</p>';
     }
