@@ -421,6 +421,9 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
         data: jpeg.split(',')[1] || '',
         mimeType: 'image/jpeg',
       });
+      // Free canvas memory
+      canvas.width = 0;
+      canvas.height = 0;
     }
 
     return { images, totalPages, renderedPages: pagesToRender };
@@ -563,13 +566,14 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
   const VALID_STATUSES = ['pass', 'fail', 'warn', 'na'];
 
   function aggregateResults(results, checks) {
+    const safeResults = results || {};
     const categories = {};
     for (const check of checks) {
       const catKey = check.category;
       if (!categories[catKey]) {
         categories[catKey] = { items: [], pass: 0, fail: 0, warn: 0, na: 0 };
       }
-      const raw = results[check.id] || { status: 'warn', finding: '未判定' };
+      const raw = safeResults[check.id] || { status: 'warn', finding: '未判定' };
       const status = VALID_STATUSES.includes(raw.status) ? raw.status : 'warn';
       const r = { ...raw, status };
       categories[catKey].items.push({ ...check, ...r });
@@ -603,8 +607,8 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
 
   function estimateCost(usage, modelId) {
     const pricing = MODEL_PRICING[modelId] || MODEL_PRICING['gemini-2.5-flash'];
-    const inputCost = (usage.promptTokens / 1_000_000) * pricing.input;
-    const outputCost = (usage.completionTokens / 1_000_000) * pricing.output;
+    const inputCost = ((usage.promptTokens ?? 0) / 1_000_000) * pricing.input;
+    const outputCost = ((usage.completionTokens ?? 0) / 1_000_000) * pricing.output;
     return {
       inputCost: inputCost.toFixed(4),
       outputCost: outputCost.toFixed(4),

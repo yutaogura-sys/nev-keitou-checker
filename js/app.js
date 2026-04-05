@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedModel: 'gemini-2.5-flash',
     selectedType: null, // 'mokutekichi' | 'kiso'
     file: null,
+    isExecuting: false,
   };
 
   /* ----------------------------------------------------------
@@ -215,7 +216,7 @@ document.addEventListener('DOMContentLoaded', () => {
    *  EXECUTE BUTTON STATE
    * ---------------------------------------------------------- */
   function updateExecuteBtn() {
-    const ready = state.apiKey && state.selectedType && state.file;
+    const ready = state.apiKey && state.selectedType && state.file && !state.isExecuting;
     executeBtn.disabled = !ready;
 
     const parts = [];
@@ -241,8 +242,9 @@ document.addEventListener('DOMContentLoaded', () => {
       showError(new Error('APIキー、図面種別、PDFファイルを全て設定してください。'));
       return;
     }
+    if (state.isExecuting) return;
 
-    // Disable button during execution
+    state.isExecuting = true;
     executeBtn.disabled = true;
 
     // Hide previous results
@@ -289,6 +291,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showError(e);
       }
     } finally {
+      state.isExecuting = false;
       updateExecuteBtn();
     }
   }
@@ -380,8 +383,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const totalUsd = parseFloat(cost.totalCost);
       const yenEstimate = Math.round(totalUsd * yenRate * 10) / 10;
       costModel.textContent = modelNames[modelId] || modelId;
-      costInput.textContent = `${usage.promptTokens.toLocaleString()} tokens（$${cost.inputCost}）`;
-      costOutput.textContent = `${usage.completionTokens.toLocaleString()} tokens（$${cost.outputCost}）`;
+      costInput.textContent = `${(usage.promptTokens ?? 0).toLocaleString()} tokens（$${cost.inputCost}）`;
+      costOutput.textContent = `${(usage.completionTokens ?? 0).toLocaleString()} tokens（$${cost.outputCost}）`;
       costTotal.textContent = `$${cost.totalCost}（約 ${yenEstimate}円）`;
     }
 
@@ -513,9 +516,17 @@ document.addEventListener('DOMContentLoaded', () => {
   newCheckBtn.addEventListener('click', () => {
     resultSection.style.display = 'none';
     errorSection.style.display = 'none';
+    aiCommentSection.style.display = 'none';
+    costSection.style.display = 'none';
+    lastResult = null;
     clearFile();
     typeCards.forEach((c) => c.classList.remove('active'));
     state.selectedType = null;
+    // Reset tabs to NeV
+    tabBtns.forEach((b) => b.classList.remove('active'));
+    $$('.tab-content').forEach((c) => c.classList.remove('active'));
+    tabBtns[0]?.classList.add('active');
+    $('#tab-nev')?.classList.add('active');
     updateExecuteBtn();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
