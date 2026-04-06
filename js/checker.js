@@ -680,6 +680,94 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
   }
 
   /* ----------------------------------------------------------
+   *  9. EXCEL EXPORT
+   * ---------------------------------------------------------- */
+  function resultToExcel(type, detected, nevAgg, manualAgg, aiComment) {
+    const typeLabel = type === 'kiso' ? '基礎充電' : '目的地充電';
+    const now = new Date().toLocaleString('ja-JP');
+    const wb = XLSX.utils.book_new();
+
+    // --- Sheet 1: 判定概要 ---
+    const summaryData = [
+      ['電気系統図 要件判定チェック結果'],
+      [],
+      ['判定日時', now],
+      ['図面種別', typeLabel],
+      [],
+      ['■ NeV要件判定'],
+      ['総合判定', nevAgg.overall === 'pass' ? '合格' : nevAgg.overall === 'fail' ? '不合格' : '要確認'],
+      ['合格', nevAgg.totalPass, '不合格', nevAgg.totalFail, '要確認', nevAgg.totalWarn],
+      [],
+      ['■ 作図センターマニュアル判定'],
+      ['総合判定', manualAgg.overall === 'pass' ? '合格' : manualAgg.overall === 'fail' ? '不合格' : '要確認'],
+      ['合格', manualAgg.totalPass, '不合格', manualAgg.totalFail, '要確認', manualAgg.totalWarn],
+      [],
+      ['■ 検出情報'],
+      ['図面名称', detected?.drawing_title || '未検出'],
+      ['設置場所', detected?.facility_name || '未検出'],
+      ['作成者', detected?.author || '未検出'],
+      ['作成日', detected?.creation_date || '未検出'],
+      ['縮尺', detected?.scale || '未検出'],
+      ['配電方法', detected?.power_distribution || '未検出'],
+      ['充電設備', [detected?.charger_type, detected?.charger_maker, detected?.charger_model].filter(Boolean).join(' ') || '未検出'],
+      ['台数', detected?.charger_count || '未検出'],
+      ['主幹AT', detected?.main_breaker_at ? detected.main_breaker_at + 'AT' : '未検出'],
+      ['デマンド制御', detected?.has_demand_control ?? '未検出'],
+    ];
+    const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
+    ws1['!cols'] = [{ wch: 20 }, { wch: 40 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
+    XLSX.utils.book_append_sheet(wb, ws1, '判定概要');
+
+    // --- Sheet 2: NeV要件判定 ---
+    const nevData = [['カテゴリ', 'No.', 'チェック項目', '判定', '条件', '判定根拠']];
+    const nevCats = Object.entries(nevAgg.categories)
+      .filter(([key]) => CATEGORIES[key]?.group === 'nev')
+      .sort(([a], [b]) => (CATEGORIES[a]?.sort || 99) - (CATEGORIES[b]?.sort || 99));
+    for (const [catKey, cat] of nevCats) {
+      const meta = CATEGORIES[catKey];
+      if (!meta) continue;
+      for (const item of (cat.items || [])) {
+        const statusText = item.status === 'pass' ? '合格' : item.status === 'fail' ? '不合格' : item.status === 'na' ? '対象外' : '要確認';
+        nevData.push([meta.title, item.id, item.label, statusText, item.condition || '', item.finding || '']);
+      }
+    }
+    const ws2 = XLSX.utils.aoa_to_sheet(nevData);
+    ws2['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 45 }, { wch: 10 }, { wch: 30 }, { wch: 60 }];
+    XLSX.utils.book_append_sheet(wb, ws2, 'NeV要件判定');
+
+    // --- Sheet 3: マニュアル判定 ---
+    const manData = [['カテゴリ', 'No.', 'チェック項目', '判定', '条件', '判定根拠']];
+    const manCats = Object.entries(manualAgg.categories)
+      .filter(([key]) => CATEGORIES[key]?.group === 'manual')
+      .sort(([a], [b]) => (CATEGORIES[a]?.sort || 99) - (CATEGORIES[b]?.sort || 99));
+    for (const [catKey, cat] of manCats) {
+      const meta = CATEGORIES[catKey];
+      if (!meta) continue;
+      for (const item of (cat.items || [])) {
+        const statusText = item.status === 'pass' ? '合格' : item.status === 'fail' ? '不合格' : item.status === 'na' ? '対象外' : '要確認';
+        manData.push([meta.title, item.id, item.label, statusText, item.condition || '', item.finding || '']);
+      }
+    }
+    const ws3 = XLSX.utils.aoa_to_sheet(manData);
+    ws3['!cols'] = [{ wch: 18 }, { wch: 20 }, { wch: 45 }, { wch: 10 }, { wch: 30 }, { wch: 60 }];
+    XLSX.utils.book_append_sheet(wb, ws3, 'マニュアル判定');
+
+    // --- Sheet 4: AI所見 ---
+    if (aiComment?.trim()) {
+      const aiData = [['AI 総合コメント'], [], [aiComment.trim()]];
+      const ws4 = XLSX.utils.aoa_to_sheet(aiData);
+      ws4['!cols'] = [{ wch: 100 }];
+      XLSX.utils.book_append_sheet(wb, ws4, 'AI所見');
+    }
+
+    // Generate filename
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+    const fileName = `電気系統図_判定結果_${typeLabel}_${dateStr}.xlsx`;
+
+    XLSX.writeFile(wb, fileName);
+  }
+
+  /* ----------------------------------------------------------
    *  PUBLIC API
    * ---------------------------------------------------------- */
   return {
@@ -698,5 +786,6 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     aggregateResults,
     estimateCost,
     resultToText,
+    resultToExcel,
   };
 })();

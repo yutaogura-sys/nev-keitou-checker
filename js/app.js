@@ -57,6 +57,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const costInput = $('#costInput');
   const costOutput = $('#costOutput');
   const costTotal = $('#costTotal');
+  const excelBtn = $('#excelBtn');
   const copyBtn = $('#copyBtn');
   const newCheckBtn = $('#newCheckBtn');
   const tabBtns = $$('.tab-btn');
@@ -491,8 +492,19 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   /* ----------------------------------------------------------
-   *  COPY & NEW CHECK
+   *  EXCEL EXPORT, COPY & NEW CHECK
    * ---------------------------------------------------------- */
+  excelBtn.addEventListener('click', () => {
+    if (!lastResult) return;
+    try {
+      DrawingChecker.resultToExcel(
+        lastResult.type, lastResult.detected, lastResult.nevAgg, lastResult.manualAgg, lastResult.aiComment
+      );
+    } catch (e) {
+      alert('Excel出力に失敗しました: ' + e.message);
+    }
+  });
+
   copyBtn.addEventListener('click', () => {
     if (!lastResult) return;
     const text = DrawingChecker.resultToText(
