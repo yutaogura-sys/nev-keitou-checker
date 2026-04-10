@@ -401,6 +401,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     const arrayBuffer = await file.arrayBuffer();
     const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
     const totalPages = pdf.numPages;
+    if (totalPages === 0) throw new Error('PDFにページがありません。');
     const maxPages = 6;
     const pagesToRender = Math.min(totalPages, maxPages);
     const images = [];
@@ -454,7 +455,10 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     const ctx = canvas.getContext('2d');
     if (!ctx) throw new Error('Canvas 2Dコンテキストを取得できませんでした');
     await page.render({ canvasContext: ctx, viewport }).promise;
-    return canvas.toDataURL('image/jpeg', 0.8);
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    canvas.width = 0;
+    canvas.height = 0;
+    return dataUrl;
   }
 
   /* ----------------------------------------------------------
@@ -518,7 +522,12 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       throw new Error(err.error?.message || `API Error: ${resp.status}`);
     }
 
-    const data = await resp.json();
+    let data;
+    try {
+      data = await resp.json();
+    } catch {
+      throw new Error('APIからの応答がJSON形式ではありませんでした。');
+    }
 
     if (!data.candidates || data.candidates.length === 0) {
       throw new Error('APIから回答が返りませんでした。安全フィルターにかかった可能性があります。');
@@ -528,6 +537,12 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     if (candidate.finishReason === 'SAFETY') {
       throw new Error('安全フィルターによりブロックされました。');
     }
+    if (candidate.finishReason === 'RECITATION') {
+      throw new Error('著作権フィルターによりブロックされました。');
+    }
+
+    // Check MAX_TOKENS before parsing to give a specific error
+    const isMaxTokens = candidate.finishReason === 'MAX_TOKENS';
 
     const text = candidate.content?.parts?.[0]?.text;
     if (!text) {
@@ -544,11 +559,22 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
         try {
           parsed = JSON.parse(match[1].trim());
         } catch {
+          if (isMaxTokens) {
+            throw new Error('出力が途中で切れました（MAX_TOKENS）。Flashモデルに変更するか、ページ数の少ないPDFで再試行してください。');
+          }
           throw new Error('JSON_PARSE_ERROR');
         }
       } else {
+        if (isMaxTokens) {
+          throw new Error('出力が途中で切れました（MAX_TOKENS）。Flashモデルに変更するか、ページ数の少ないPDFで再試行してください。');
+        }
         throw new Error('JSON_PARSE_ERROR');
       }
+    }
+
+    // Validate parsed result is an object
+    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+      throw new Error('APIから予期しないJSON構造が返されました。再試行してください。');
     }
 
     // Token usage
@@ -561,7 +587,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
         completionTokens: usage.candidatesTokenCount || 0,
         totalTokens: usage.totalTokenCount || 0,
       },
-      truncated: candidate.finishReason === 'MAX_TOKENS',
+      truncated: isMaxTokens,
     };
   }
 

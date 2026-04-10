@@ -41,6 +41,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const loadingSection = $('#loadingSection');
   const loadingText = $('#loadingText');
   const errorSection = $('#errorSection');
+  const errorTitle = $('#errorTitle');
   const errorMessage = $('#errorMessage');
   const retryBtn = $('#retryBtn');
   const resultSection = $('#resultSection');
@@ -68,11 +69,13 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----------------------------------------------------------
    *  INIT: Load saved API key
    * ---------------------------------------------------------- */
-  const savedKey = localStorage.getItem('nev_keitou_apikey');
-  if (savedKey) {
-    apiKeyInput.value = savedKey;
-    state.apiKey = savedKey;
-  }
+  try {
+    const savedKey = localStorage.getItem('nev_keitou_apikey');
+    if (savedKey) {
+      apiKeyInput.value = savedKey;
+      state.apiKey = savedKey;
+    }
+  } catch { /* localStorage unavailable (private browsing etc.) */ }
 
   /* ----------------------------------------------------------
    *  API KEY HANDLING
@@ -247,6 +250,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     state.isExecuting = true;
     executeBtn.disabled = true;
+    retryBtn.disabled = true;
 
     // Hide previous results
     resultSection.style.display = 'none';
@@ -293,6 +297,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     } finally {
       state.isExecuting = false;
+      retryBtn.disabled = false;
       updateExecuteBtn();
     }
   }
@@ -301,15 +306,15 @@ document.addEventListener('DOMContentLoaded', () => {
     errorSection.style.display = 'block';
     if (error.message.startsWith('API_QUOTA_EXCEEDED')) {
       const isPro = error.message.includes('2.5-pro');
-      $('#errorTitle').textContent = 'APIクォータ超過';
+      errorTitle.textContent = 'APIクォータ超過';
       errorMessage.textContent = isPro
         ? 'Gemini 2.5 Pro は有料プランのAPIキーが必要です。無料APIキーをご利用の場合は、Flashモデルを選択してください。'
         : 'Gemini APIの利用制限に達しました。しばらく待ってから再試行するか、有料プランにアップグレードしてください。';
     } else if (error.message === 'JSON_PARSE_ERROR') {
-      $('#errorTitle').textContent = '応答解析エラー';
+      errorTitle.textContent = '応答解析エラー';
       errorMessage.textContent = 'AIの応答をJSON形式で解析できませんでした。再試行してください。';
     } else {
-      $('#errorTitle').textContent = 'エラーが発生しました';
+      errorTitle.textContent = 'エラーが発生しました';
       errorMessage.textContent = error.message;
     }
   }
@@ -347,9 +352,9 @@ document.addEventListener('DOMContentLoaded', () => {
       detectedItem('充電設備', chargerInfo),
       detectedItem('台数', info.charger_count),
       detectedItem('主幹AT', info.main_breaker_at ? info.main_breaker_at + 'AT' : null),
-      detectedItem('デマンド制御', info.has_demand_control),
+      detectedItem('デマンド制御', boolLabel(info.has_demand_control)),
       detectedItem('色分け', info.color_usage),
-      detectedItem('既設充電設備', info.has_existing_equipment),
+      detectedItem('既設充電設備', boolLabel(info.has_existing_equipment)),
     ].join('');
 
     // Tab badges
@@ -387,6 +392,8 @@ document.addEventListener('DOMContentLoaded', () => {
       costInput.textContent = `${(usage.promptTokens ?? 0).toLocaleString()} tokens（$${cost.inputCost}）`;
       costOutput.textContent = `${(usage.completionTokens ?? 0).toLocaleString()} tokens（$${cost.outputCost}）`;
       costTotal.textContent = `$${cost.totalCost}（約 ${yenEstimate}円）`;
+    } else {
+      costSection.style.display = 'none';
     }
 
     // Scroll to results
@@ -466,6 +473,12 @@ document.addEventListener('DOMContentLoaded', () => {
     return div.innerHTML;
   }
 
+  function boolLabel(v) {
+    if (v === true) return 'あり';
+    if (v === false) return 'なし';
+    return v;
+  }
+
   /* ----------------------------------------------------------
    *  CATEGORY TOGGLE (event delegation)
    * ---------------------------------------------------------- */
@@ -487,7 +500,8 @@ document.addEventListener('DOMContentLoaded', () => {
       tabBtns.forEach((b) => b.classList.remove('active'));
       $$('.tab-content').forEach((c) => c.classList.remove('active'));
       btn.classList.add('active');
-      $(`#tab-${btn.dataset.tab}`).classList.add('active');
+      const tabContent = $(`#tab-${btn.dataset.tab}`);
+      if (tabContent) tabContent.classList.add('active');
     });
   });
 
@@ -507,22 +521,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
   copyBtn.addEventListener('click', () => {
     if (!lastResult) return;
-    const text = DrawingChecker.resultToText(
-      lastResult.type, lastResult.detected, lastResult.nevAgg, lastResult.manualAgg, lastResult.aiComment
-    );
-    navigator.clipboard.writeText(text).then(() => {
-      const orig = copyBtn.innerHTML;
-      copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> コピーしました';
-      setTimeout(() => { copyBtn.innerHTML = orig; }, 2000);
-    }).catch(() => {
-      // Fallback
-      const ta = document.createElement('textarea');
-      ta.value = text;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-    });
+    try {
+      const text = DrawingChecker.resultToText(
+        lastResult.type, lastResult.detected, lastResult.nevAgg, lastResult.manualAgg, lastResult.aiComment
+      );
+      navigator.clipboard.writeText(text).then(() => {
+        const orig = copyBtn.innerHTML;
+        copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> コピーしました';
+        setTimeout(() => { copyBtn.innerHTML = orig; }, 2000);
+      }).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.left = '-9999px';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      });
+    } catch (e) {
+      alert('コピーに失敗しました: ' + e.message);
+    }
   });
 
   newCheckBtn.addEventListener('click', () => {
