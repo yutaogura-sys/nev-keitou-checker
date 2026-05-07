@@ -20,8 +20,8 @@ const DrawingChecker = (() => {
 
     // ② 充電設備の仕様
     { id: 'nev_charger_type', category: 'nev_charger_spec', label: '充電設備の種類の記載', detail: '急速・普通等の種類が記載されていること。' },
-    { id: 'nev_charger_maker', category: 'nev_charger_spec', label: '充電設備のメーカー名の記載', detail: 'メーカー名が記載されていること。' },
-    { id: 'nev_charger_model', category: 'nev_charger_spec', label: '充電設備の型式の記載', detail: '型式が記載されていること。' },
+    { id: 'nev_charger_maker', category: 'nev_charger_spec', label: '充電設備のメーカー名の記載', detail: 'メーカー名が記載されていること。機器シンボル付近・凡例・機器リスト・注記欄・表題欄・2ページ目以降も含め全領域を確認すること。' },
+    { id: 'nev_charger_model', category: 'nev_charger_spec', label: '充電設備の型式の記載', detail: '型式が記載されていること。機器シンボル付近・凡例・機器リスト・注記欄・表題欄・2ページ目以降も含め全領域を確認すること。' },
 
     // ③ 配電方法
     { id: 'nev_power_dist', category: 'nev_power_dist', label: '配電方法の種類の記載', detail: '例：1φ3W 100/200V、3φ3W 6.6kV/210V 等。配電方式が明記されていること。' },
@@ -73,7 +73,7 @@ const DrawingChecker = (() => {
     { id: 'nev_transformer', category: 'nev_power_source', label: '変圧器容量の記載', detail: '高圧受変電設備の場合、変圧器の容量が記載されていること。', condition: '高圧受変電設備の場合' },
 
     // 新規契約
-    { id: 'nev_new_contract', category: 'nev_power_source', label: '新設分電盤のメーカー名・型式', detail: '新設分電盤がある場合、メーカー名と型式が記載されていること。', condition: '新設分電盤がある場合' },
+    { id: 'nev_new_contract', category: 'nev_power_source', label: '新設分電盤のメーカー名・型式', detail: '新設分電盤がある場合、メーカー名と型式が記載されていること。分電盤シンボル付近・凡例・機器リスト・注記欄・2ページ目以降も含め全領域を確認すること。', condition: '新設分電盤がある場合' },
   ];
 
   // --- 作図センターマニュアル判定（目的地 6kW/9.6kW） ---
@@ -84,7 +84,7 @@ const DrawingChecker = (() => {
     { id: 'man_m_scale', category: 'man_basic', label: '縮尺欄の記載（参考）', detail: '電気系統図は概念図のため縮尺は本来不要。表題欄に縮尺欄がある場合は「-」（ノンスケール）の記載が望ましい。縮尺欄がない場合や「-」以外の記載でもna（電気系統図には適用しない要件）。', condition: '表題欄に縮尺欄がある場合（参考項目）' },
     { id: 'man_m_date', category: 'man_basic', label: '作成日 = ミラエネ指定日', detail: '作成日が所定の日付であること。' },
 
-    { id: 'man_m_equip_spec', category: 'man_equip', label: '充電設備の仕様（種類・メーカー名・型式）の記載', detail: '充電設備の種類（普通）、メーカー名、型式が記載されていること。' },
+    { id: 'man_m_equip_spec', category: 'man_equip', label: '充電設備の仕様（種類・メーカー名・型式）の記載', detail: '充電設備の種類（普通）、メーカー名、型式が記載されていること。機器シンボル付近・凡例・機器リスト・注記欄・2ページ目以降も含め全領域を確認すること。' },
     { id: 'man_m_power_type', category: 'man_equip', label: '配電方法の記載（例：1Φ3W100/200V）', detail: '受電方式が記載されていること。' },
     { id: 'man_m_panel_name', category: 'man_panel', label: '盤名称が配線ルート図と一致', detail: '電源盤・分電盤の名称が配線ルート図と一致していること。' },
     { id: 'man_m_cable_type', category: 'man_cable', label: '電源元から充電設備までの配線種類の記載', detail: '例：CVT22sq等、配線種類が記載されていること。' },
@@ -92,7 +92,7 @@ const DrawingChecker = (() => {
 
     { id: 'man_m_ground', category: 'man_ground', label: '接地の記載（接地線・接地種別・盤内接続）', detail: '接地線（例：IV5.5sq）、接地種別（例：ED/Ed/ec等、大文字小文字不問）、盤内での接続が記載されていること。' },
     { id: 'man_m_loadbalance', category: 'man_demand', label: 'ローバラ注記/デマンドコントロール注記の記載', detail: '設置台数が主幹ATの定格動作台数を超える場合（出力制御が必要な場合）、「※デマンドコントロール機能 充電器同時利用で分電盤主幹ブレーカー容量を超える場合、一時的に充電出力を制御する」等の注記が記載されていること。「デマンドコントロール機能」「ロードバランシング」「出力制御」等の表現も許容。設置台数≦定格動作台数の場合（出力制御不要）はna。', condition: '設置台数が主幹ATの定格動作台数を超える場合（出力制御が必要な場合）' },
-    { id: 'man_m_new_panel', category: 'man_panel', label: '新設盤のメーカー名・型式の記載', detail: '特例引込・新設引込の場合のみ、新設分電盤・電源盤のメーカー名と型式が記載されていること。既設キュービクルからの引込（既設引込）の場合は不要のためna。', condition: '特例引込・新設引込の場合（既設キュービクル案件は対象外）' },
+    { id: 'man_m_new_panel', category: 'man_panel', label: '新設盤のメーカー名・型式の記載', detail: '特例引込・新設引込の場合のみ、新設分電盤・電源盤のメーカー名と型式が記載されていること。既設キュービクルからの引込（既設引込）の場合は不要のためna。分電盤シンボル付近・凡例・機器リスト・注記欄・2ページ目以降も含め全領域を確認すること。', condition: '特例引込・新設引込の場合（既設キュービクル案件は対象外）' },
     { id: 'man_m_capacity_note', category: 'man_annotation', label: '電気容量確保確認済み注記', detail: '「各ブレーカーにおいて、必要な電気容量確保確認済み」の注記が記載されていること。' },
 
     // 色分け
@@ -118,7 +118,7 @@ const DrawingChecker = (() => {
     { id: 'man_k_date', category: 'man_basic', label: '作成日 = ミラエネ指定日', detail: '作成日が所定の日付であること。' },
 
     { id: 'man_k_simultaneous', category: 'man_demand', label: '同時運転台数の正確性', detail: '同時運転台数が正しいこと（1-10台:2台同時、11-15台:3台同時、16-20台:4台同時）。' },
-    { id: 'man_k_equip_spec', category: 'man_equip', label: '充電設備の仕様（種類・メーカー名・型式）の記載', detail: '充電設備の種類（普通）、メーカー名、型式が記載されていること。' },
+    { id: 'man_k_equip_spec', category: 'man_equip', label: '充電設備の仕様（種類・メーカー名・型式）の記載', detail: '充電設備の種類（普通）、メーカー名、型式が記載されていること。機器シンボル付近・凡例・機器リスト・注記欄・2ページ目以降も含め全領域を確認すること。' },
     { id: 'man_k_power_type', category: 'man_equip', label: '配電方法の記載（例：1Φ3W100/200V）', detail: '受電方式が記載されていること。' },
     { id: 'man_k_panel_name', category: 'man_panel', label: '盤名称（制御盤含む）が配線ルート図と一致', detail: '電源盤・分電盤・制御盤の名称が配線ルート図と一致していること。' },
 
@@ -130,7 +130,7 @@ const DrawingChecker = (() => {
 
     { id: 'man_k_demand_required', category: 'man_demand', label: 'デマンドコントロール記載要否の判定', detail: '主幹ATの定格動作台数（100%出力可能台数）を超える充電器が接続されている場合、デマンドコントロールの記載が必須。定格動作台数: 40AT→1台、75AT→2台、100AT→3台、125AT→4台、150AT→5台、200AT→6台、225AT→7台、250AT→8台。設置台数が定格動作台数を超える場合にデマンドコントロール注記がなければfail。' },
     { id: 'man_k_demand_note', category: 'man_demand', label: 'デマンドコントロール注記の記載内容', detail: 'デマンドコントロールが必要な場合、「デマンドコントロール機能により充電出力を制御する」旨の注記と、LB率（出力制限割合）が記載されていること。「デマンドコントロール機能」「ロードバランシング」「出力制御」等の表現も許容。デマンドコントロール不要の場合はna。', condition: 'デマンドコントロールが必要な場合（設置台数＞定格動作台数）' },
-    { id: 'man_k_new_panel', category: 'man_panel', label: '新設盤のメーカー名・型式の記載', detail: '特例引込・新設引込の場合のみ、新設分電盤・電源盤のメーカー名（日東工業等）と型式（OR16-57C等）が記載されていること。既設キュービクルからの引込（既設引込）の場合は不要のためna。', condition: '特例引込・新設引込の場合（既設キュービクル案件は対象外）' },
+    { id: 'man_k_new_panel', category: 'man_panel', label: '新設盤のメーカー名・型式の記載', detail: '特例引込・新設引込の場合のみ、新設分電盤・電源盤のメーカー名（日東工業等）と型式（OR16-57C等）が記載されていること。既設キュービクルからの引込（既設引込）の場合は不要のためna。分電盤シンボル付近・凡例・機器リスト・注記欄・2ページ目以降も含め全領域を確認すること。', condition: '特例引込・新設引込の場合（既設キュービクル案件は対象外）' },
     { id: 'man_k_capacity_note', category: 'man_annotation', label: '電気容量確保確認済み注記', detail: '「各ブレーカーにおいて、必要な電気容量確保確認済み」の注記が記載されていること。' },
 
     // 色分け
@@ -208,6 +208,23 @@ const DrawingChecker = (() => {
 - detected_infoも全ページの情報を統合して記載すること
 
 **文字ケースの許容**: 接地種別（Ec/EC/Ed/ED等）、配線種別、ブレーカー仕様等の英字表記は大文字・小文字の違いを問わない。いずれの表記でも有効とすること。
+
+**メーカー名・型式の読み取りガイダンス（重要）**: メーカー名・型式は図面上の様々な場所に記載される。以下を全て確認すること：
+- 表題欄（右下の枠内）の機器情報欄
+- 機器シンボルの直近に添えられた小文字テキスト（シンボルの上下左右）
+- 凡例（凡例表・機器リスト・仕様表）
+- 注記欄・備考欄・特記事項
+- 単線結線図中のブロック内テキスト
+- 2ページ目以降の詳細図・機器仕様一覧
+- 充電設備・分電盤・引込開閉器のシンボル付近の型番表記（例：「日東工業 OR16-57C」「河村電器 EQF」等）
+- 小さい文字やフォントサイズの異なるテキストも見落とさないこと
+
+**fail判定前の再確認ルール（重要）**: 「記載なし」を理由にfailと判定する前に、以下を必ず実施すること：
+1. 全ページを再度確認する（1ページ目になくても2ページ目以降にある可能性）
+2. 機器シンボル周辺の小さい文字を再確認する
+3. 凡例・注記欄・備考欄を再確認する
+4. それでも見つからない場合のみfailとする
+5. 文字が小さい・潰れている等で読み取りが困難な場合は「warn」（failではなく）とし、findingに「読み取り困難のため要目視確認」と記載する
 
 ---
 
@@ -416,8 +433,8 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       if (viewport.width > maxDim || viewport.height > maxDim) {
         scale = maxDim / Math.max(viewport.width, viewport.height);
       }
-      // Minimum resolution: 2048px on longest side for readability
-      const minDim = 2048;
+      // Minimum resolution: 2560px on longest side for readability
+      const minDim = 2560;
       if (viewport.width * scale < minDim && viewport.height * scale < minDim) {
         scale = minDim / Math.max(viewport.width, viewport.height);
       }
@@ -430,7 +447,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       if (!ctx) throw new Error('Canvas 2Dコンテキストを取得できませんでした');
 
       await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
-      const jpeg = canvas.toDataURL('image/jpeg', 0.92);
+      const jpeg = canvas.toDataURL('image/jpeg', 0.95);
       images.push({
         pageNumber: i,
         data: jpeg.split(',')[1] || '',
