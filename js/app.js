@@ -299,8 +299,14 @@ document.addEventListener('DOMContentLoaded', () => {
       loadingSection.style.display = 'none';
       renderResults(result, nevAgg, manualAgg, cost, usage, runState.selectedModel);
 
-      // Store for export
-      lastResult = { type: runState.selectedType, detected: result.detected_info, nevAgg, manualAgg, aiComment: result.ai_comment };
+      // Store for export (with safe defaults to prevent crash on missing fields)
+      lastResult = {
+        type: runState.selectedType,
+        detected: result.detected_info || {},
+        nevAgg,
+        manualAgg,
+        aiComment: typeof result.ai_comment === 'string' ? result.ai_comment : '',
+      };
 
     } catch (e) {
       loadingSection.style.display = 'none';
@@ -357,11 +363,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const info = result.detected_info || {};
     const chargerInfo = [info.charger_type, info.charger_maker, info.charger_model].filter(Boolean).join(' ');
     // Main breaker spec: combine type, AF, AT into a readable string
+    // Strip trailing unit suffix to avoid duplication ("100AT" → "100" → "100AT")
+    const stripUnit = (v, unit) => {
+      if (v === null || v === undefined) return '';
+      return String(v).replace(new RegExp(`\\s*${unit}\\s*$`, 'i'), '').trim();
+    };
     const mainBreakerSpec = (() => {
       const parts = [];
-      if (info.main_breaker_type && String(info.main_breaker_type).trim()) parts.push(String(info.main_breaker_type).trim());
-      const af = info.main_breaker_af && String(info.main_breaker_af).trim();
-      const at = info.main_breaker_at && String(info.main_breaker_at).trim();
+      const type = info.main_breaker_type && String(info.main_breaker_type).trim();
+      if (type) parts.push(type);
+      const af = stripUnit(info.main_breaker_af, 'AF');
+      const at = stripUnit(info.main_breaker_at, 'AT');
       if (af && at) parts.push(`${af}AF/${at}AT`);
       else if (at) parts.push(`${at}AT`);
       else if (af) parts.push(`${af}AF`);
@@ -395,8 +407,8 @@ document.addEventListener('DOMContentLoaded', () => {
     // Manual results
     manualResults.innerHTML = renderCategoryResults(manualAgg, 'manual');
 
-    // AI Comment
-    if (result.ai_comment?.trim()) {
+    // AI Comment (defensive: only render if it's a non-empty string)
+    if (typeof result.ai_comment === 'string' && result.ai_comment.trim()) {
       aiCommentSection.style.display = 'block';
       aiComment.textContent = result.ai_comment.trim();
     } else {
@@ -508,8 +520,13 @@ document.addEventListener('DOMContentLoaded', () => {
   function boolLabel(v) {
     if (v === true || v === 'true') return 'あり';
     if (v === false || v === 'false') return 'なし';
-    // Pass through strings like "不明" / numeric / etc.; null/undefined/empty trigger 未検出 in detectedItem
-    return v;
+    if (v === null || v === undefined || v === '') return null; // → 未検出
+    // Allow legitimate Japanese strings like "不明" / "あり" / "なし" through
+    if (typeof v === 'string') return v;
+    // Reject objects/arrays/functions to avoid "[object Object]"
+    if (typeof v === 'object' || typeof v === 'function') return null;
+    // Numbers/other primitives: stringify
+    return String(v);
   }
 
   /* ----------------------------------------------------------

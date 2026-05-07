@@ -870,9 +870,19 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     const boolJP = (v) => {
       if (v === true || v === 'true') return 'あり';
       if (v === false || v === 'false') return 'なし';
-      return (v === null || v === undefined || v === '') ? '未検出' : v;
+      if (v === null || v === undefined || v === '') return '未検出';
+      // Allow legitimate Japanese strings ("不明" / "あり" / "なし" etc.)
+      if (typeof v === 'string') return v;
+      // Reject objects/arrays to avoid "[object Object]"
+      if (typeof v === 'object' || typeof v === 'function') return '未検出';
+      return String(v);
     };
     const joinNonEmpty = (arr) => arr.filter(s => s && String(s).trim()).map(s => String(s).trim()).join(' ');
+    // Strip trailing unit suffix (e.g. "100AT" → "100", "150AF" → "150") to avoid duplication
+    const stripUnit = (v, unit) => {
+      if (v === null || v === undefined) return '';
+      return String(v).replace(new RegExp(`\\s*${unit}\\s*$`, 'i'), '').trim();
+    };
 
     const safeAgg = (a) => a || { categories: {}, totalPass: 0, totalFail: 0, totalWarn: 0, overall: 'warn' };
     const sNev = safeAgg(nevAgg);
@@ -902,12 +912,12 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       ['配電方法', detected?.power_distribution || '未検出'],
       ['充電設備', joinNonEmpty([detected?.charger_type, detected?.charger_maker, detected?.charger_model]) || '未検出'],
       ['台数', (detected?.charger_count !== undefined && detected?.charger_count !== null && String(detected.charger_count).trim()) ? detected.charger_count : '未検出'],
-      ['主幹ブレーカー仕様', joinNonEmpty([
-        detected?.main_breaker_type,
-        (detected?.main_breaker_af && detected?.main_breaker_at) ? `${detected.main_breaker_af}AF/${detected.main_breaker_at}AT` :
-          detected?.main_breaker_at ? `${detected.main_breaker_at}AT` :
-          detected?.main_breaker_af ? `${detected.main_breaker_af}AF` : ''
-      ]) || '未検出'],
+      ['主幹ブレーカー仕様', (() => {
+        const af = stripUnit(detected?.main_breaker_af, 'AF');
+        const at = stripUnit(detected?.main_breaker_at, 'AT');
+        const cap = (af && at) ? `${af}AF/${at}AT` : at ? `${at}AT` : af ? `${af}AF` : '';
+        return joinNonEmpty([detected?.main_breaker_type, cap]) || '未検出';
+      })()],
       ['分岐ブレーカー容量記載', boolJP(detected?.branch_breaker_complete)],
       ['デマンド制御', boolJP(detected?.has_demand_control)],
       ['既設充電設備', boolJP(detected?.has_existing_equipment)],
