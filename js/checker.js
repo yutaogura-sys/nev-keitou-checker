@@ -384,8 +384,7 @@ ${isKiso ? `### 基礎充電（6kW）固有のマニュアル要件
     "annotations": ["検出された注記・注釈のリスト"]
   },
   "nev_results": {
-${NEV_COMMON_CHECKS.map(c => `    "${c.id}": { "status": "pass|fail|warn|na", "finding": "判定根拠の詳細" }`).join(',\n')},
-${NEV_CONDITIONAL_CHECKS.map(c => `    "${c.id}": { "status": "pass|fail|warn|na", "finding": "判定根拠の詳細" }`).join(',\n')}
+${[...NEV_COMMON_CHECKS, ...NEV_CONDITIONAL_CHECKS].map(c => `    "${c.id}": { "status": "pass|fail|warn|na", "finding": "判定根拠の詳細" }`).join(',\n')}
   },
   "manual_results": {
 ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.id}": { "status": "pass|fail|warn|na", "finding": "判定根拠の詳細" }`).join(',\n')}
@@ -415,67 +414,108 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
    *  4. PDF TO IMAGES
    * ---------------------------------------------------------- */
   async function pdfToImages(file) {
+    if (typeof pdfjsLib === 'undefined') {
+      throw new Error('PDF.jsライブラリが読み込まれていません。ページを再読み込みしてください。');
+    }
     const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const totalPages = pdf.numPages;
-    if (totalPages === 0) throw new Error('PDFにページがありません。');
-    const maxPages = 6;
-    const pagesToRender = Math.min(totalPages, maxPages);
-    const images = [];
-
-    for (let i = 1; i <= pagesToRender; i++) {
-      const page = await pdf.getPage(i);
-      const viewport = page.getViewport({ scale: 1 });
-
-      // Safe canvas size: max 4096px on longest side
-      const maxDim = 4096;
-      let scale = 1;
-      if (viewport.width > maxDim || viewport.height > maxDim) {
-        scale = maxDim / Math.max(viewport.width, viewport.height);
+    let pdf;
+    try {
+      pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    } catch (e) {
+      if (e?.name === 'PasswordException') {
+        throw new Error('PDFがパスワード保護されています。保護を解除してから再アップロードしてください。');
       }
-      // Minimum resolution: 2560px on longest side for readability
-      const minDim = 2560;
-      if (viewport.width * scale < minDim && viewport.height * scale < minDim) {
-        scale = minDim / Math.max(viewport.width, viewport.height);
-      }
-
-      const scaledViewport = page.getViewport({ scale });
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.floor(scaledViewport.width);
-      canvas.height = Math.floor(scaledViewport.height);
-      const ctx = canvas.getContext('2d');
-      if (!ctx) throw new Error('Canvas 2Dコンテキストを取得できませんでした');
-
-      await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
-      const jpeg = canvas.toDataURL('image/jpeg', 0.95);
-      images.push({
-        pageNumber: i,
-        data: jpeg.split(',')[1] || '',
-        mimeType: 'image/jpeg',
-      });
-      // Free canvas memory
-      canvas.width = 0;
-      canvas.height = 0;
+      throw new Error('PDFを読み込めませんでした: ' + (e?.message || e));
     }
 
-    return { images, totalPages, renderedPages: pagesToRender };
+    try {
+      const totalPages = pdf.numPages;
+      if (totalPages === 0) throw new Error('PDFにページがありません。');
+      const maxPages = 6;
+      const pagesToRender = Math.min(totalPages, maxPages);
+      const images = [];
+
+      for (let i = 1; i <= pagesToRender; i++) {
+        const page = await pdf.getPage(i);
+        const viewport = page.getViewport({ scale: 1 });
+
+        // Safe canvas size: max 4096px on longest side
+        const maxDim = 4096;
+        let scale = 1;
+        if (viewport.width > maxDim || viewport.height > maxDim) {
+          scale = maxDim / Math.max(viewport.width, viewport.height);
+        }
+        // Minimum resolution: 2560px on longest side for readability
+        const minDim = 2560;
+        if (viewport.width * scale < minDim && viewport.height * scale < minDim) {
+          scale = minDim / Math.max(viewport.width, viewport.height);
+        }
+
+        const scaledViewport = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.floor(scaledViewport.width);
+        canvas.height = Math.floor(scaledViewport.height);
+        const ctx = canvas.getContext('2d');
+        if (!ctx) throw new Error('Canvas 2Dコンテキストを取得できませんでした');
+
+        try {
+          await page.render({ canvasContext: ctx, viewport: scaledViewport }).promise;
+          const jpeg = canvas.toDataURL('image/jpeg', 0.95);
+          const data = jpeg.split(',')[1] || '';
+          if (!data || data.length < 100) {
+            throw new Error(`ページ${i}の画像変換に失敗しました（メモリ不足の可能性）`);
+          }
+          images.push({
+            pageNumber: i,
+            data,
+            mimeType: 'image/jpeg',
+          });
+        } finally {
+          // Free canvas memory even on render failure
+          canvas.width = 0;
+          canvas.height = 0;
+        }
+      }
+
+      return { images, totalPages, renderedPages: pagesToRender };
+    } finally {
+      // Always release pdf.js worker resources
+      try { await pdf.destroy(); } catch { /* noop */ }
+    }
   }
 
   async function pdfToPreview(file) {
+    if (typeof pdfjsLib === 'undefined') {
+      throw new Error('PDF.jsライブラリが読み込まれていません。');
+    }
     const arrayBuffer = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-    const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: 0.5 });
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.floor(viewport.width);
-    canvas.height = Math.floor(viewport.height);
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw new Error('Canvas 2Dコンテキストを取得できませんでした');
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-    canvas.width = 0;
-    canvas.height = 0;
-    return dataUrl;
+    let pdf;
+    try {
+      pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    } catch (e) {
+      if (e?.name === 'PasswordException') {
+        throw new Error('PDFがパスワード保護されています。');
+      }
+      throw e;
+    }
+    try {
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale: 0.5 });
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('Canvas 2Dコンテキストを取得できませんでした');
+      try {
+        await page.render({ canvasContext: ctx, viewport }).promise;
+        return canvas.toDataURL('image/jpeg', 0.8);
+      } finally {
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+    } finally {
+      try { await pdf.destroy(); } catch { /* noop */ }
+    }
   }
 
   /* ----------------------------------------------------------
@@ -485,7 +525,12 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     const resp = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`
     );
-    if (!resp.ok) throw new Error('APIキーが無効です');
+    if (!resp.ok) {
+      if (resp.status === 401 || resp.status === 403) throw new Error('APIキーが無効です');
+      if (resp.status === 429) throw new Error('レート制限に達しています。しばらく待ってから再試行してください。');
+      if (resp.status >= 500) throw new Error('Google APIサーバーエラーです。時間をおいて再試行してください。');
+      throw new Error(`APIエラー: ${resp.status}`);
+    }
     return true;
   }
 
@@ -497,6 +542,10 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
   }
 
   async function callGemini(apiKey, images, type, modelId) {
+    if (!apiKey) throw new Error('APIキーが指定されていません。');
+    if (!modelId) throw new Error('モデルIDが指定されていません。');
+    if (!images || images.length === 0) throw new Error('画像が空のためAPI呼び出しができません。');
+
     const prompt = buildPrompt(type);
 
     const parts = [{ text: prompt }];
@@ -547,7 +596,11 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     }
 
     if (!data.candidates || data.candidates.length === 0) {
-      throw new Error('APIから回答が返りませんでした。安全フィルターにかかった可能性があります。');
+      // Distinguish prompt-level blocks from empty MAX_TOKENS responses
+      if (data.promptFeedback?.blockReason) {
+        throw new Error('プロンプトがブロックされました: ' + data.promptFeedback.blockReason);
+      }
+      throw new Error('APIから回答が返りませんでした。トークン上限到達または安全フィルターの可能性があります。');
     }
 
     const candidate = data.candidates[0];
@@ -561,9 +614,16 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     // Check MAX_TOKENS before parsing to give a specific error
     const isMaxTokens = candidate.finishReason === 'MAX_TOKENS';
 
-    const text = candidate.content?.parts?.[0]?.text;
+    // Concatenate all text parts (some responses split text across multiple parts)
+    const text = (candidate.content?.parts || [])
+      .map(p => p.text)
+      .filter(Boolean)
+      .join('');
     if (!text) {
-      throw new Error('APIからテキスト応答がありませんでした。');
+      if (isMaxTokens) {
+        throw new Error('出力が途中で切れました（MAX_TOKENS）。Flashモデルに変更するか、ページ数の少ないPDFで再試行してください。');
+      }
+      throw new Error('APIからテキスト応答がありませんでした。finishReason=' + (candidate.finishReason || '不明'));
     }
 
     let parsed;
@@ -592,6 +652,12 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     // Validate parsed result is an object
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
       throw new Error('APIから予期しないJSON構造が返されました。再試行してください。');
+    }
+
+    // Validate nev_results / manual_results are objects (not arrays/null)
+    const isPlainObject = v => v && typeof v === 'object' && !Array.isArray(v);
+    if (!isPlainObject(parsed.nev_results) || !isPlainObject(parsed.manual_results)) {
+      throw new Error('判定結果の構造が不正です（nev_results/manual_results）。再試行してください。');
     }
 
     // Token usage
@@ -624,15 +690,17 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
 
   function aggregateResults(results, checks) {
     const safeResults = results || {};
+    const safeChecks = Array.isArray(checks) ? checks : [];
     const categories = {};
-    for (const check of checks) {
+    for (const check of safeChecks) {
       const catKey = check.category;
       if (!categories[catKey]) {
         categories[catKey] = { items: [], pass: 0, fail: 0, warn: 0, na: 0 };
       }
-      const raw = safeResults[check.id] || { status: 'warn', finding: '未判定' };
+      const raw = safeResults[check.id] || {};
       const status = VALID_STATUSES.includes(raw.status) ? raw.status : 'warn';
-      const r = { ...raw, status };
+      const finding = (typeof raw.finding === 'string' && raw.finding.trim()) ? raw.finding : '未判定';
+      const r = { status, finding };
       categories[catKey].items.push({ ...check, ...r });
       categories[catKey][status] += 1;
     }
@@ -649,6 +717,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     let overall = 'pass';
     if (totalFail > 0) overall = 'fail';
     else if (totalWarn > 0) overall = 'warn';
+    else if (totalPass === 0) overall = 'warn'; // 全てnaまたは集計なしの場合
 
     return { categories, totalPass, totalFail, totalWarn, totalChecked, overall };
   }
@@ -663,14 +732,25 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
   };
 
   function estimateCost(usage, modelId) {
-    const pricing = MODEL_PRICING[modelId] || MODEL_PRICING['gemini-2.5-flash'];
-    const inputCost = ((usage.promptTokens ?? 0) / 1_000_000) * pricing.input;
-    const outputCost = ((usage.completionTokens ?? 0) / 1_000_000) * pricing.output;
+    const safeUsage = usage || {};
+    // Try exact match first, then prefix match (handles versioned IDs like gemini-2.5-pro-preview-05-06)
+    let pricing = MODEL_PRICING[modelId];
+    let pricingKey = modelId;
+    if (!pricing) {
+      pricingKey = Object.keys(MODEL_PRICING).find(k => modelId && modelId.includes(k));
+      pricing = pricingKey ? MODEL_PRICING[pricingKey] : MODEL_PRICING['gemini-2.5-flash'];
+    }
+    const promptT = Number(safeUsage.promptTokens) || 0;
+    const completionT = Number(safeUsage.completionTokens) || 0;
+    const inputCost = (promptT / 1_000_000) * pricing.input;
+    const outputCost = (completionT / 1_000_000) * pricing.output;
     return {
       inputCost: inputCost.toFixed(4),
       outputCost: outputCost.toFixed(4),
       totalCost: (inputCost + outputCost).toFixed(4),
       currency: 'USD',
+      pricingMatched: !!MODEL_PRICING[modelId],
+      matchedKey: pricingKey,
     };
   }
 
@@ -685,6 +765,13 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     lines.push(`判定日時: ${new Date().toLocaleString('ja-JP')}`);
     lines.push('='.repeat(60));
 
+    // Helper: filter and join non-empty strings
+    const joinNonEmpty = (arr) => arr.filter(s => s && String(s).trim()).map(s => String(s).trim()).join(' ');
+    // Helper: sorted category iteration
+    const sortedCats = (agg) => Object.entries(agg.categories || {})
+      .filter(([key]) => CATEGORIES[key])
+      .sort(([a], [b]) => (CATEGORIES[a].sort || 99) - (CATEGORIES[b].sort || 99));
+
     // Detected info
     lines.push('\n--- 検出情報 ---');
     if (detected) {
@@ -692,8 +779,9 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       lines.push(`設置場所: ${detected.facility_name || '未検出'}`);
       lines.push(`作成者: ${detected.author || '未検出'}`);
       lines.push(`作成日: ${detected.creation_date || '未検出'}`);
-      lines.push(`充電設備: ${detected.charger_type || ''} ${detected.charger_maker || ''} ${detected.charger_model || ''}`);
-      lines.push(`台数: ${detected.charger_count || '未検出'}`);
+      const chargerInfo = joinNonEmpty([detected.charger_type, detected.charger_maker, detected.charger_model]);
+      lines.push(`充電設備: ${chargerInfo || '未検出'}`);
+      lines.push(`台数: ${(detected.charger_count !== undefined && detected.charger_count !== null && String(detected.charger_count).trim()) ? detected.charger_count : '未検出'}`);
       lines.push(`配電方法: ${detected.power_distribution || '未検出'}`);
     }
 
@@ -701,11 +789,10 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     lines.push('\n--- NeV要件判定 ---');
     lines.push(`総合判定: ${nevAgg.overall === 'pass' ? 'PASS' : nevAgg.overall === 'fail' ? 'FAIL' : 'WARN'}`);
     lines.push(`合格: ${nevAgg.totalPass} / 不合格: ${nevAgg.totalFail} / 要確認: ${nevAgg.totalWarn}`);
-    for (const [catKey, cat] of Object.entries(nevAgg.categories)) {
+    for (const [catKey, cat] of sortedCats(nevAgg)) {
       const meta = CATEGORIES[catKey];
-      if (!meta) continue;
       lines.push(`\n[${meta.title}]`);
-      for (const item of cat.items) {
+      for (const item of (cat.items || [])) {
         const mark = item.status === 'pass' ? 'O' : item.status === 'fail' ? 'X' : item.status === 'na' ? '-' : '?';
         lines.push(`  ${mark} ${item.label}`);
         lines.push(`    -> ${item.finding}`);
@@ -716,11 +803,10 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     lines.push('\n--- 作図センターマニュアル判定 ---');
     lines.push(`総合判定: ${manualAgg.overall === 'pass' ? 'PASS' : manualAgg.overall === 'fail' ? 'FAIL' : 'WARN'}`);
     lines.push(`合格: ${manualAgg.totalPass} / 不合格: ${manualAgg.totalFail} / 要確認: ${manualAgg.totalWarn}`);
-    for (const [catKey, cat] of Object.entries(manualAgg.categories)) {
+    for (const [catKey, cat] of sortedCats(manualAgg)) {
       const meta = CATEGORIES[catKey];
-      if (!meta) continue;
       lines.push(`\n[${meta.title}]`);
-      for (const item of cat.items) {
+      for (const item of (cat.items || [])) {
         const mark = item.status === 'pass' ? 'O' : item.status === 'fail' ? 'X' : item.status === 'na' ? '-' : '?';
         lines.push(`  ${mark} ${item.label}`);
         lines.push(`    -> ${item.finding}`);
@@ -740,9 +826,24 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
    *  9. EXCEL EXPORT
    * ---------------------------------------------------------- */
   function resultToExcel(type, detected, nevAgg, manualAgg, aiComment) {
+    if (typeof XLSX === 'undefined') {
+      throw new Error('Excelライブラリ(SheetJS)が読み込まれていません。ページを再読み込みしてください。');
+    }
     const typeLabel = type === 'kiso' ? '基礎充電' : '目的地充電';
     const now = new Date().toLocaleString('ja-JP');
     const wb = XLSX.utils.book_new();
+
+    // Helpers
+    const boolJP = (v) => {
+      if (v === true || v === 'true') return 'あり';
+      if (v === false || v === 'false') return 'なし';
+      return (v === null || v === undefined || v === '') ? '未検出' : v;
+    };
+    const joinNonEmpty = (arr) => arr.filter(s => s && String(s).trim()).map(s => String(s).trim()).join(' ');
+
+    const safeAgg = (a) => a || { categories: {}, totalPass: 0, totalFail: 0, totalWarn: 0, overall: 'warn' };
+    const sNev = safeAgg(nevAgg);
+    const sMan = safeAgg(manualAgg);
 
     // --- Sheet 1: 判定概要 ---
     const summaryData = [
@@ -752,12 +853,12 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       ['図面種別', typeLabel],
       [],
       ['■ NeV要件判定'],
-      ['総合判定', nevAgg.overall === 'pass' ? '合格' : nevAgg.overall === 'fail' ? '不合格' : '要確認'],
-      ['合格', nevAgg.totalPass, '不合格', nevAgg.totalFail, '要確認', nevAgg.totalWarn],
+      ['総合判定', sNev.overall === 'pass' ? '合格' : sNev.overall === 'fail' ? '不合格' : '要確認'],
+      ['合格', sNev.totalPass, '不合格', sNev.totalFail, '要確認', sNev.totalWarn],
       [],
       ['■ 作図センターマニュアル判定'],
-      ['総合判定', manualAgg.overall === 'pass' ? '合格' : manualAgg.overall === 'fail' ? '不合格' : '要確認'],
-      ['合格', manualAgg.totalPass, '不合格', manualAgg.totalFail, '要確認', manualAgg.totalWarn],
+      ['総合判定', sMan.overall === 'pass' ? '合格' : sMan.overall === 'fail' ? '不合格' : '要確認'],
+      ['合格', sMan.totalPass, '不合格', sMan.totalFail, '要確認', sMan.totalWarn],
       [],
       ['■ 検出情報'],
       ['図面名称', detected?.drawing_title || '未検出'],
@@ -766,10 +867,11 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       ['作成日', detected?.creation_date || '未検出'],
       ['縮尺', detected?.scale || '未検出'],
       ['配電方法', detected?.power_distribution || '未検出'],
-      ['充電設備', [detected?.charger_type, detected?.charger_maker, detected?.charger_model].filter(Boolean).join(' ') || '未検出'],
-      ['台数', detected?.charger_count || '未検出'],
+      ['充電設備', joinNonEmpty([detected?.charger_type, detected?.charger_maker, detected?.charger_model]) || '未検出'],
+      ['台数', (detected?.charger_count !== undefined && detected?.charger_count !== null && String(detected.charger_count).trim()) ? detected.charger_count : '未検出'],
       ['主幹AT', detected?.main_breaker_at ? detected.main_breaker_at + 'AT' : '未検出'],
-      ['デマンド制御', detected?.has_demand_control ?? '未検出'],
+      ['デマンド制御', boolJP(detected?.has_demand_control)],
+      ['既設充電設備', boolJP(detected?.has_existing_equipment)],
     ];
     const ws1 = XLSX.utils.aoa_to_sheet(summaryData);
     ws1['!cols'] = [{ wch: 20 }, { wch: 40 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 10 }];
@@ -777,7 +879,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
 
     // --- Sheet 2: NeV要件判定 ---
     const nevData = [['カテゴリ', 'No.', 'チェック項目', '判定', '条件', '判定根拠']];
-    const nevCats = Object.entries(nevAgg.categories)
+    const nevCats = Object.entries(nevAgg?.categories || {})
       .filter(([key]) => CATEGORIES[key]?.group === 'nev')
       .sort(([a], [b]) => (CATEGORIES[a]?.sort || 99) - (CATEGORIES[b]?.sort || 99));
     for (const [catKey, cat] of nevCats) {
@@ -794,7 +896,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
 
     // --- Sheet 3: マニュアル判定 ---
     const manData = [['カテゴリ', 'No.', 'チェック項目', '判定', '条件', '判定根拠']];
-    const manCats = Object.entries(manualAgg.categories)
+    const manCats = Object.entries(manualAgg?.categories || {})
       .filter(([key]) => CATEGORIES[key]?.group === 'manual')
       .sort(([a], [b]) => (CATEGORIES[a]?.sort || 99) - (CATEGORIES[b]?.sort || 99));
     for (const [catKey, cat] of manCats) {

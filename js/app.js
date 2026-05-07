@@ -70,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
    *  INIT: Load saved API key
    * ---------------------------------------------------------- */
   try {
-    const savedKey = localStorage.getItem('nev_keitou_apikey');
+    const savedKey = (localStorage.getItem('nev_keitou_apikey') || '').trim();
     if (savedKey) {
       apiKeyInput.value = savedKey;
       state.apiKey = savedKey;
@@ -169,7 +169,9 @@ document.addEventListener('DOMContentLoaded', () => {
   uploadArea.addEventListener('drop', (e) => {
     e.preventDefault();
     uploadArea.classList.remove('dragover');
-    if (e.dataTransfer.files.length > 0) handleFile(e.dataTransfer.files[0]);
+    if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFile(e.dataTransfer.files[0]);
+    }
   });
   fileInput.addEventListener('change', () => {
     if (fileInput.files.length > 0) handleFile(fileInput.files[0]);
@@ -252,6 +254,17 @@ document.addEventListener('DOMContentLoaded', () => {
     executeBtn.disabled = true;
     retryBtn.disabled = true;
 
+    // Snapshot state at execution start to avoid mid-run mutation
+    const runState = {
+      apiKey: state.apiKey,
+      selectedType: state.selectedType,
+      selectedModel: state.selectedModel,
+      file: state.file,
+    };
+
+    // Clear previous result so stale data isn't exported on failure
+    lastResult = null;
+
     // Hide previous results
     resultSection.style.display = 'none';
     errorSection.style.display = 'none';
@@ -260,33 +273,34 @@ document.addEventListener('DOMContentLoaded', () => {
 
     try {
       // 1. PDF to images
-      const { images, totalPages, renderedPages } = await DrawingChecker.pdfToImages(state.file);
+      const { images, totalPages, renderedPages } = await DrawingChecker.pdfToImages(runState.file);
       loadingText.textContent = `Gemini APIで解析中... (${renderedPages}/${totalPages}ページ)`;
 
       // 2. Call Gemini
       const { result, usage, truncated } = await DrawingChecker.callGemini(
-        state.apiKey, images, state.selectedType, state.selectedModel
+        runState.apiKey, images, runState.selectedType, runState.selectedModel
       );
 
+      if (!result) throw new Error('APIから空の結果が返されました。');
       if (truncated) {
         console.warn('Gemini output was truncated (MAX_TOKENS)');
       }
 
       // 3. Aggregate results
-      const checkItems = DrawingChecker.getCheckItems(state.selectedType);
+      const checkItems = DrawingChecker.getCheckItems(runState.selectedType);
       const allNevChecks = [...checkItems.nevCommon, ...checkItems.nevConditional];
       const nevAgg = DrawingChecker.aggregateResults(result.nev_results || {}, allNevChecks);
       const manualAgg = DrawingChecker.aggregateResults(result.manual_results || {}, checkItems.manual);
 
       // 4. Cost
-      const cost = DrawingChecker.estimateCost(usage, state.selectedModel);
+      const cost = DrawingChecker.estimateCost(usage, runState.selectedModel);
 
       // 5. Render
       loadingSection.style.display = 'none';
-      renderResults(result, nevAgg, manualAgg, cost, usage, state.selectedModel);
+      renderResults(result, nevAgg, manualAgg, cost, usage, runState.selectedModel);
 
       // Store for export
-      lastResult = { type: state.selectedType, detected: result.detected_info, nevAgg, manualAgg, aiComment: result.ai_comment };
+      lastResult = { type: runState.selectedType, detected: result.detected_info, nevAgg, manualAgg, aiComment: result.ai_comment };
 
     } catch (e) {
       loadingSection.style.display = 'none';
@@ -378,7 +392,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     // Cost
-    if (cost && usage) {
+    if (cost && cost.totalCost && usage) {
       costSection.style.display = 'block';
       const modelNames = {
         'gemini-2.5-pro': 'Gemini 2.5 Pro',
@@ -387,10 +401,11 @@ document.addEventListener('DOMContentLoaded', () => {
       };
       const yenRate = 150;
       const totalUsd = parseFloat(cost.totalCost);
-      const yenEstimate = Math.round(totalUsd * yenRate * 10) / 10;
-      costModel.textContent = modelNames[modelId] || modelId;
-      costInput.textContent = `${(usage.promptTokens ?? 0).toLocaleString()} tokens（$${cost.inputCost}）`;
-      costOutput.textContent = `${(usage.completionTokens ?? 0).toLocaleString()} tokens（$${cost.outputCost}）`;
+      const yenEstimate = isNaN(totalUsd) ? 0 : Math.round(totalUsd * yenRate * 10) / 10;
+      const note = cost.pricingMatched === false ? '（料金未登録モデル: 概算は2.5-flash基準）' : '';
+      costModel.textContent = (modelNames[modelId] || modelId) + note;
+      costInput.textContent = `${(usage.promptTokens ?? 0).toLocaleString()} tokens（$${cost.inputCost ?? '0.0000'}）`;
+      costOutput.textContent = `${(usage.completionTokens ?? 0).toLocaleString()} tokens（$${cost.outputCost ?? '0.0000'}）`;
       costTotal.textContent = `$${cost.totalCost}（約 ${yenEstimate}円）`;
     } else {
       costSection.style.display = 'none';
@@ -407,7 +422,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function detectedItem(label, value) {
-    const display = value && String(value).trim() ? escapeHtml(String(value).trim()) : '未検出';
+    // Treat null/undefined/empty/whitespace as 未検出. Allow 0/false/strings.
+    let display = '未検出';
+    if (value !== null && value !== undefined) {
+      const s = String(value).trim();
+      if (s) display = escapeHtml(s);
+    }
     return `<div class="detected-item">
       <span class="detected-item-label">${escapeHtml(label)}</span>
       <span class="detected-item-value">${display}</span>
@@ -415,7 +435,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function renderCategoryResults(agg, group) {
-    const cats = Object.entries(agg.categories)
+    const cats = Object.entries(agg?.categories || {})
       .filter(([key]) => DrawingChecker.CATEGORIES[key]?.group === group)
       .sort(([a], [b]) => (DrawingChecker.CATEGORIES[a]?.sort || 99) - (DrawingChecker.CATEGORIES[b]?.sort || 99));
 
@@ -474,8 +494,9 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function boolLabel(v) {
-    if (v === true) return 'あり';
-    if (v === false) return 'なし';
+    if (v === true || v === 'true') return 'あり';
+    if (v === false || v === 'false') return 'なし';
+    // Pass through strings like "不明" / numeric / etc.; null/undefined/empty trigger 未検出 in detectedItem
     return v;
   }
 
@@ -519,25 +540,36 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  let copyOrigHtml = null;
+  let copyResetTimer = null;
+  function showCopiedFeedback() {
+    if (copyOrigHtml === null) copyOrigHtml = copyBtn.innerHTML;
+    copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> コピーしました';
+    if (copyResetTimer) clearTimeout(copyResetTimer);
+    copyResetTimer = setTimeout(() => {
+      if (copyOrigHtml !== null) copyBtn.innerHTML = copyOrigHtml;
+      copyResetTimer = null;
+    }, 2000);
+  }
+
   copyBtn.addEventListener('click', () => {
     if (!lastResult) return;
     try {
       const text = DrawingChecker.resultToText(
         lastResult.type, lastResult.detected, lastResult.nevAgg, lastResult.manualAgg, lastResult.aiComment
       );
-      navigator.clipboard.writeText(text).then(() => {
-        const orig = copyBtn.innerHTML;
-        copyBtn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg> コピーしました';
-        setTimeout(() => { copyBtn.innerHTML = orig; }, 2000);
-      }).catch(() => {
+      navigator.clipboard.writeText(text).then(showCopiedFeedback).catch(() => {
         const ta = document.createElement('textarea');
         ta.value = text;
         ta.style.position = 'fixed';
         ta.style.left = '-9999px';
         document.body.appendChild(ta);
         ta.select();
-        document.execCommand('copy');
+        let ok = false;
+        try { ok = document.execCommand('copy'); } catch { /* noop */ }
         document.body.removeChild(ta);
+        if (ok) showCopiedFeedback();
+        else alert('クリップボードへのコピーに失敗しました。手動でテキストをコピーしてください。');
       });
     } catch (e) {
       alert('コピーに失敗しました: ' + e.message);
@@ -549,15 +581,19 @@ document.addEventListener('DOMContentLoaded', () => {
     errorSection.style.display = 'none';
     aiCommentSection.style.display = 'none';
     costSection.style.display = 'none';
+    loadingSection.style.display = 'none';
+    hideStatus();
     lastResult = null;
     clearFile();
     typeCards.forEach((c) => c.classList.remove('active'));
     state.selectedType = null;
-    // Reset tabs to NeV
+    // Reset tabs to NeV (find by data-attribute, not array index)
     tabBtns.forEach((b) => b.classList.remove('active'));
     $$('.tab-content').forEach((c) => c.classList.remove('active'));
-    tabBtns[0]?.classList.add('active');
-    $('#tab-nev')?.classList.add('active');
+    const nevTab = Array.from(tabBtns).find(b => b.dataset.tab === 'nev');
+    if (nevTab) nevTab.classList.add('active');
+    const nevPanel = $('#tab-nev');
+    if (nevPanel) nevPanel.classList.add('active');
     updateExecuteBtn();
     window.scrollTo({ top: 0, behavior: 'smooth' });
   });
