@@ -650,14 +650,17 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     }
 
     // Validate parsed result is an object
+    const truncationHint = isMaxTokens
+      ? '出力が途中で切れた可能性があります（MAX_TOKENS）。Flashモデルに変更するか、ページ数の少ないPDFで再試行してください。'
+      : '再試行してください。';
     if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
-      throw new Error('APIから予期しないJSON構造が返されました。再試行してください。');
+      throw new Error('APIから予期しないJSON構造が返されました。' + truncationHint);
     }
 
     // Validate nev_results / manual_results are objects (not arrays/null)
     const isPlainObject = v => v && typeof v === 'object' && !Array.isArray(v);
     if (!isPlainObject(parsed.nev_results) || !isPlainObject(parsed.manual_results)) {
-      throw new Error('判定結果の構造が不正です（nev_results/manual_results）。再試行してください。');
+      throw new Error('判定結果の構造が不正です（nev_results/manual_results）。' + truncationHint);
     }
 
     // Token usage
@@ -736,12 +739,27 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     // Try exact match first, then prefix match (handles versioned IDs like gemini-2.5-pro-preview-05-06)
     let pricing = MODEL_PRICING[modelId];
     let pricingKey = modelId;
+    let matchType = 'exact'; // 'exact' | 'prefix' | 'fallback'
     if (!pricing) {
-      pricingKey = Object.keys(MODEL_PRICING).find(k => modelId && modelId.includes(k));
-      pricing = pricingKey ? MODEL_PRICING[pricingKey] : MODEL_PRICING['gemini-2.5-flash'];
+      const found = Object.keys(MODEL_PRICING).find(k => modelId && modelId.includes(k));
+      if (found) {
+        pricingKey = found;
+        pricing = MODEL_PRICING[found];
+        matchType = 'prefix';
+      } else {
+        pricingKey = 'gemini-2.5-flash';
+        pricing = MODEL_PRICING['gemini-2.5-flash'];
+        matchType = 'fallback';
+      }
     }
-    const promptT = Number(safeUsage.promptTokens) || 0;
-    const completionT = Number(safeUsage.completionTokens) || 0;
+    // Robust token coercion: handle "1,234" strings, NaN, undefined
+    const toCount = (v) => {
+      if (v === null || v === undefined) return 0;
+      const n = parseInt(String(v).replace(/,/g, ''), 10);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    };
+    const promptT = toCount(safeUsage.promptTokens);
+    const completionT = toCount(safeUsage.completionTokens);
     const inputCost = (promptT / 1_000_000) * pricing.input;
     const outputCost = (completionT / 1_000_000) * pricing.output;
     return {
@@ -749,7 +767,9 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       outputCost: outputCost.toFixed(4),
       totalCost: (inputCost + outputCost).toFixed(4),
       currency: 'USD',
-      pricingMatched: !!MODEL_PRICING[modelId],
+      // Treat both exact match and prefix match as "正しくマッチ済み"
+      pricingMatched: matchType !== 'fallback',
+      matchType,
       matchedKey: pricingKey,
     };
   }
