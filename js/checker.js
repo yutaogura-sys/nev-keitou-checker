@@ -31,9 +31,10 @@ const DrawingChecker = (() => {
     { id: 'nev_panel_name', category: 'nev_power_source', label: '盤名称の記載', detail: '盤名称がある場合はその名称が記載されていること。' },
 
     // ⑤ ブレーカーの仕様
-    { id: 'nev_breaker_all', category: 'nev_breaker', label: '充電設備設置工事に伴うブレーカーの全記載', detail: '工事に伴う全てのブレーカーが記載されていること。' },
-    { id: 'nev_breaker_spec', category: 'nev_breaker', label: 'ブレーカーの仕様の記載', detail: '例：ELB2P2E、MCCB3P3E等の仕様が記載されていること。' },
-    { id: 'nev_breaker_capacity', category: 'nev_breaker', label: 'ブレーカーの容量の記載', detail: '例：20AF/20AT、50AF/40AT等の容量（フレーム/トリップ）が記載されていること。' },
+    { id: 'nev_breaker_all', category: 'nev_breaker', label: '充電設備設置工事に伴うブレーカーの全記載', detail: '工事に伴う全てのブレーカー（主幹・分岐・上流）が記載されていること。記載漏れがあればfail。' },
+    { id: 'nev_breaker_spec', category: 'nev_breaker', label: 'ブレーカーの仕様（種別）の記載', detail: '例：ELB2P2E、MCCB3P3E等の仕様（種別）が全てのブレーカーに個別に記載されていること。1つでも種別が記載されていないブレーカーがあればfail。' },
+    { id: 'nev_main_breaker_capacity', category: 'nev_breaker', label: '主幹ブレーカーの容量（AF/AT）の記載', detail: '主幹ブレーカーの容量（フレーム/トリップ）が記載されていること。例：100AF/75AT、150AF/125AT等。記載なし、もしくはAF/ATの片方のみの記載はfail。' },
+    { id: 'nev_branch_breaker_capacity', category: 'nev_breaker', label: '分岐ブレーカーの容量（AF/AT）の記載', detail: '分岐ブレーカー（充電器ごとのブレーカー）全てに容量（AF/AT）が記載されていること。例：30AF/20AT、50AF/20AT等。1つでも容量未記載のブレーカーがあればfail。' },
     { id: 'nev_breaker_upstream', category: 'nev_breaker', label: '幹線上流ブレーカー容量の記載', detail: '幹線の上流ブレーカー（既存含む）の容量が記載されていること。' },
 
     // ⑥ 電源線の仕様
@@ -88,7 +89,8 @@ const DrawingChecker = (() => {
     { id: 'man_m_power_type', category: 'man_equip', label: '配電方法の記載（例：1Φ3W100/200V）', detail: '受電方式が記載されていること。' },
     { id: 'man_m_panel_name', category: 'man_panel', label: '盤名称が配線ルート図と一致', detail: '電源盤・分電盤の名称が配線ルート図と一致していること。' },
     { id: 'man_m_cable_type', category: 'man_cable', label: '電源元から充電設備までの配線種類の記載', detail: '例：CVT22sq等、配線種類が記載されていること。' },
-    { id: 'man_m_breaker_spec', category: 'man_breaker', label: 'ブレーカー仕様・容量の記載', detail: 'ブレーカーの仕様（例：ELB2P2E）と容量（例：50AF/40AT）が全て記載されていること。' },
+    { id: 'man_m_main_breaker_spec', category: 'man_breaker', label: '主幹ブレーカーの仕様・容量', detail: '主幹ブレーカーの種別（例：MCCB3P3E、ELB3P3E等）と容量（例：100AF/75AT、150AF/125AT等）が記載されていること。AF・ATのいずれかが欠けている場合はfail。設置台数に対して容量が不足/過剰の場合もfail。' },
+    { id: 'man_m_branch_breaker_capacity', category: 'man_breaker', label: '分岐ブレーカーの仕様・容量', detail: '分岐ブレーカー（子ブレーカー、充電器ごと）全てに種別（例：ELB3P2E）と容量（例：30AF/20AT、50AF/20AT）が記載されていること。1つでも容量未記載のブレーカーがあればfail。シンボルだけで容量数値が無い場合もfail。' },
 
     { id: 'man_m_ground', category: 'man_ground', label: '接地の記載（接地線・接地種別・盤内接続）', detail: '接地線（例：IV5.5sq）、接地種別（例：ED/Ed/ec等、大文字小文字不問）、盤内での接続が記載されていること。' },
     { id: 'man_m_loadbalance', category: 'man_demand', label: 'ローバラ注記/デマンドコントロール注記の記載', detail: '設置台数が主幹ATの定格動作台数を超える場合（出力制御が必要な場合）、「※デマンドコントロール機能 充電器同時利用で分電盤主幹ブレーカー容量を超える場合、一時的に充電出力を制御する」等の注記が記載されていること。「デマンドコントロール機能」「ロードバランシング」「出力制御」等の表現も許容。設置台数≦定格動作台数の場合（出力制御不要）はna。', condition: '設置台数が主幹ATの定格動作台数を超える場合（出力制御が必要な場合）' },
@@ -123,8 +125,8 @@ const DrawingChecker = (() => {
     { id: 'man_k_panel_name', category: 'man_panel', label: '盤名称（制御盤含む）が配線ルート図と一致', detail: '電源盤・分電盤・制御盤の名称が配線ルート図と一致していること。' },
 
     { id: 'man_k_cable_count', category: 'man_cable', label: '幹線・分岐配線が台数に応じた正しい仕様', detail: '6kW仕様: 幹線は台数に応じて選定（1-2台:CV8sq-3C、2台LBなし:CVT22sq、3-5台:CVT38sq、5台:CVT60sq、6台以上:CVT100sq）。分岐配線は全構成共通でCV8sq-3C。' },
-    { id: 'man_k_main_breaker', category: 'man_breaker', label: '主幹ブレーカーが台数に応じた正しい容量', detail: '6kW仕様: 1-2台(LBなし):50-100AT、2台(LBなし):100AF/75AT、3-5台:100AF/100AT、4台:150AF/125AT、5台:150AF/150AT、6台:225AF/200AT、7台:250AF/225AT。' },
-    { id: 'man_k_branch_breaker', category: 'man_breaker', label: '分岐ブレーカーの仕様・容量', detail: '分岐ブレーカーの仕様と容量が正しいこと。ELB 3P2E、一面構成:30AF/20AT、二面構成:50AF/20AT。' },
+    { id: 'man_k_main_breaker', category: 'man_breaker', label: '主幹ブレーカーが台数に応じた正しい容量', detail: '6kW仕様: 1-2台(LBなし):50-100AT、2台(LBなし):100AF/75AT、3-5台:100AF/100AT、4台:150AF/125AT、5台:150AF/150AT、6台:225AF/200AT、7台:250AF/225AT。図面上の主幹AT値と仕様表が一致しない場合はfail（findingに「図面値○○AT、仕様表値○○AT」の形で具体的に記載）。AF/ATの片方のみの記載もfail。' },
+    { id: 'man_k_branch_breaker', category: 'man_breaker', label: '分岐ブレーカーの仕様・容量', detail: '分岐ブレーカー（子ブレーカー）全てに種別と容量が記載されていること。ELB 3P2E、一面構成:30AF/20AT、二面構成:50AF/20AT。1つでも容量(AF/AT)未記載があればfail。種別と仕様表が異なる場合もfail（findingに具体的な相違内容を記載）。' },
     { id: 'man_k_lb_rule', category: 'man_demand', label: 'LB（ロードバランシング）設計の適用', detail: '3台以上の案件は全てLB（ロードバランシング）設計が必須。LBの有無に応じた配線・ブレーカー仕様が正しいこと。1-2台の場合はLB不要のためna。', condition: '3台以上の案件の場合' },
     { id: 'man_k_ground', category: 'man_ground', label: '接地の記載（接地種別・接地線）', detail: '接地種別（ED/Ed等、大文字小文字不問）と接地線が台数に応じた正しい仕様であること。1-2台:IV5.5sq、3-5台:IV8sq、6台以上:IV14sq。' },
 
@@ -225,6 +227,14 @@ const DrawingChecker = (() => {
 3. 凡例・注記欄・備考欄を再確認する
 4. それでも見つからない場合のみfailとする
 5. 文字が小さい・潰れている等で読み取りが困難な場合は「warn」（failではなく）とし、findingに「読み取り困難のため要目視確認」と記載する
+
+**ブレーカー判定の厳格化（重要）**: ブレーカー関連のチェックでは以下を厳密に適用すること：
+1. **個別ブレーカーごとに容量(AF/AT)が必須**: シンボルだけ描かれていて容量数値が無いブレーカーは「記載なし」としてfail判定する
+2. **AFとATの両方が必要**: 「150AT」のみ、「150AF」のみといった片方欠落もfail
+3. **主幹/分岐の区別**: 「主幹ブレーカー」と「分岐ブレーカー（子ブレーカー）」は別個に評価する。片方だけ記載されていても、もう片方が未記載なら該当項目はfail
+4. **仕様表との一致確認（基礎の場合）**: 主幹AT値・分岐ブレーカー仕様は仕様表の規定値と完全一致していること。ATが1段階でもずれていればfail（findingに「図面値75AT、仕様表値125AT、設置台数4台のため不適合」のように具体的に記載）
+5. **記号だけの「ELB」「MCCB」表記**: 種別記号だけで具体的な容量が無い場合もfail扱い
+6. **AIが「ブレーカーは記載されている」と判定する前に**: 全てのブレーカーシンボルを1つずつ確認し、それぞれにAF/ATが付いているか検証する
 
 ---
 
@@ -378,7 +388,10 @@ ${isKiso ? `### 基礎充電（6kW）固有のマニュアル要件
     "grounding": "接地の記載内容",
     "color_usage": "色分けの状況（赤:新設/黒:既設の使い分け）",
     "has_existing_equipment": "既設充電設備の有無（true/false/不明）",
-    "main_breaker_at": "主幹ブレーカーのAT値（数値、例: 75）",
+    "main_breaker_at": "主幹ブレーカーのAT値（数値のみ、例: 75。ATの単位は含めない）",
+    "main_breaker_af": "主幹ブレーカーのAF値（数値のみ、例: 100。AFの単位は含めない。記載なしの場合は空文字）",
+    "main_breaker_type": "主幹ブレーカーの種別（例: MCCB3P3E、ELB3P3E、ELB2P2E等。記載なしの場合は空文字）",
+    "branch_breaker_complete": "全ての分岐ブレーカーに容量(AF/AT)が記載されているか（true/false/不明）",
     "has_demand_control": "デマンド制御の記載有無（true/false/不明）",
     "demand_control_detail": "デマンド制御の記載内容（LB率・出力制限値など。記載なしの場合は空文字）",
     "annotations": ["検出された注記・注釈のリスト"]
@@ -889,7 +902,13 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       ['配電方法', detected?.power_distribution || '未検出'],
       ['充電設備', joinNonEmpty([detected?.charger_type, detected?.charger_maker, detected?.charger_model]) || '未検出'],
       ['台数', (detected?.charger_count !== undefined && detected?.charger_count !== null && String(detected.charger_count).trim()) ? detected.charger_count : '未検出'],
-      ['主幹AT', detected?.main_breaker_at ? detected.main_breaker_at + 'AT' : '未検出'],
+      ['主幹ブレーカー仕様', joinNonEmpty([
+        detected?.main_breaker_type,
+        (detected?.main_breaker_af && detected?.main_breaker_at) ? `${detected.main_breaker_af}AF/${detected.main_breaker_at}AT` :
+          detected?.main_breaker_at ? `${detected.main_breaker_at}AT` :
+          detected?.main_breaker_af ? `${detected.main_breaker_af}AF` : ''
+      ]) || '未検出'],
+      ['分岐ブレーカー容量記載', boolJP(detected?.branch_breaker_complete)],
       ['デマンド制御', boolJP(detected?.has_demand_control)],
       ['既設充電設備', boolJP(detected?.has_existing_equipment)],
     ];

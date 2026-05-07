@@ -356,6 +356,17 @@ document.addEventListener('DOMContentLoaded', () => {
     // Detected info
     const info = result.detected_info || {};
     const chargerInfo = [info.charger_type, info.charger_maker, info.charger_model].filter(Boolean).join(' ');
+    // Main breaker spec: combine type, AF, AT into a readable string
+    const mainBreakerSpec = (() => {
+      const parts = [];
+      if (info.main_breaker_type && String(info.main_breaker_type).trim()) parts.push(String(info.main_breaker_type).trim());
+      const af = info.main_breaker_af && String(info.main_breaker_af).trim();
+      const at = info.main_breaker_at && String(info.main_breaker_at).trim();
+      if (af && at) parts.push(`${af}AF/${at}AT`);
+      else if (at) parts.push(`${at}AT`);
+      else if (af) parts.push(`${af}AF`);
+      return parts.join(' ');
+    })();
     detectedGrid.innerHTML = [
       detectedItem('図面名称', info.drawing_title),
       detectedItem('設置場所', info.facility_name),
@@ -365,7 +376,8 @@ document.addEventListener('DOMContentLoaded', () => {
       detectedItem('配電方法', info.power_distribution),
       detectedItem('充電設備', chargerInfo),
       detectedItem('台数', info.charger_count),
-      detectedItem('主幹AT', info.main_breaker_at ? info.main_breaker_at + 'AT' : null),
+      detectedItem('主幹ブレーカー', mainBreakerSpec),
+      detectedItem('分岐ブレーカー容量記載', boolLabel(info.branch_breaker_complete)),
       detectedItem('デマンド制御', boolLabel(info.has_demand_control)),
       detectedItem('色分け', info.color_usage),
       detectedItem('既設充電設備', boolLabel(info.has_existing_equipment)),
