@@ -820,7 +820,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
 
     // NeV results
     lines.push('\n--- NeV要件判定 ---');
-    lines.push(`総合判定: ${nevAgg.overall === 'pass' ? 'PASS' : nevAgg.overall === 'fail' ? 'FAIL' : 'WARN'}`);
+    lines.push(`総合判定: ${nevAgg.overall === 'pass' ? '合格' : nevAgg.overall === 'fail' ? '不合格' : '要確認'}`);
     lines.push(`合格: ${nevAgg.totalPass} / 不合格: ${nevAgg.totalFail} / 要確認: ${nevAgg.totalWarn}`);
     for (const [catKey, cat] of sortedCats(nevAgg)) {
       const meta = CATEGORIES[catKey];
@@ -834,7 +834,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
 
     // Manual results
     lines.push('\n--- 作図センターマニュアル判定 ---');
-    lines.push(`総合判定: ${manualAgg.overall === 'pass' ? 'PASS' : manualAgg.overall === 'fail' ? 'FAIL' : 'WARN'}`);
+    lines.push(`総合判定: ${manualAgg.overall === 'pass' ? '合格' : manualAgg.overall === 'fail' ? '不合格' : '要確認'}`);
     lines.push(`合格: ${manualAgg.totalPass} / 不合格: ${manualAgg.totalFail} / 要確認: ${manualAgg.totalWarn}`);
     for (const [catKey, cat] of sortedCats(manualAgg)) {
       const meta = CATEGORIES[catKey];
@@ -925,7 +925,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       const meta = CATEGORIES[catKey];
       if (!meta) continue;
       for (const item of (cat.items || [])) {
-        const statusText = item.status === 'pass' ? '合格' : item.status === 'fail' ? '不合格' : item.status === 'na' ? '対象外' : '要確認';
+        const statusText = item.status === 'pass' ? '合格' : item.status === 'fail' ? '不合格' : '要確認';
         nevData.push([meta.title, item.id, item.label, statusText, item.condition || '', item.finding || '']);
       }
     }
@@ -942,7 +942,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       const meta = CATEGORIES[catKey];
       if (!meta) continue;
       for (const item of (cat.items || [])) {
-        const statusText = item.status === 'pass' ? '合格' : item.status === 'fail' ? '不合格' : item.status === 'na' ? '対象外' : '要確認';
+        const statusText = item.status === 'pass' ? '合格' : item.status === 'fail' ? '不合格' : '要確認';
         manData.push([meta.title, item.id, item.label, statusText, item.condition || '', item.finding || '']);
       }
     }
