@@ -365,6 +365,7 @@ document.addEventListener('DOMContentLoaded', () => {
       selectedModel: state.selectedModel,
       file: state.file,
       fileName: state.file.name,
+      selfVerify: !!(selfVerifyCheck && selfVerifyCheck.checked),
     };
 
     // Clear previous result so stale data isn't exported on failure
@@ -383,15 +384,33 @@ document.addEventListener('DOMContentLoaded', () => {
       loadingText.textContent = `Gemini APIで解析中... (${renderedPages}/${totalPages}ページ)`;
 
       // 2. Call Gemini (with cancellation + transient-error retry)
-      const { result, usage, truncated } = await DrawingChecker.callGemini(
-        runState.apiKey, images, runState.selectedType, runState.selectedModel,
-        {
-          signal: abortController.signal,
-          onRetry: (n, max) => {
-            loadingText.textContent = `通信エラーのため再試行中... (${n}/${max})`;
-          },
-        }
+      const callOpts = {
+        signal: abortController.signal,
+        onRetry: (n, max) => {
+          loadingText.textContent = `通信エラーのため再試行中... (${n}/${max})`;
+        },
+      };
+      const run1 = await DrawingChecker.callGemini(
+        runState.apiKey, images, runState.selectedType, runState.selectedModel, callOpts
       );
+      let result = run1.result;
+      let usage = run1.usage;
+      let truncated = run1.truncated;
+
+      // Self-verify mode: run a second pass and reconcile disagreements to 要確認
+      if (runState.selfVerify) {
+        if (abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        loadingText.textContent = '自己検証のため2回目を解析中...';
+        const run2 = await DrawingChecker.callGemini(
+          runState.apiKey, images, runState.selectedType, runState.selectedModel, callOpts
+        );
+        result = reconcileResults(run1.result, run2.result);
+        usage = {
+          promptTokens: (run1.usage?.promptTokens || 0) + (run2.usage?.promptTokens || 0),
+          completionTokens: (run1.usage?.completionTokens || 0) + (run2.usage?.completionTokens || 0),
+        };
+        truncated = run1.truncated || run2.truncated;
+      }
 
       if (!result) throw new Error('APIから空の結果が返されました。');
 
@@ -400,6 +419,11 @@ document.addEventListener('DOMContentLoaded', () => {
       const allNevChecks = [...checkItems.nevCommon, ...checkItems.nevConditional];
       const nevAgg = DrawingChecker.aggregateResults(result.nev_results || {}, allNevChecks);
       const manualAgg = DrawingChecker.aggregateResults(result.manual_results || {}, checkItems.manual);
+
+      // 3b. Deterministic cross-check (conservatively escalate pass/na → 要確認)
+      try {
+        DrawingChecker.applyDeterministicChecks(runState.selectedType, result.detected_info, nevAgg, manualAgg);
+      } catch (e) { console.warn('Deterministic check skipped:', e); }
 
       // 4. Cost
       const cost = DrawingChecker.estimateCost(usage, runState.selectedModel);
@@ -692,6 +716,35 @@ document.addEventListener('DOMContentLoaded', () => {
     const div = document.createElement('div');
     div.textContent = str;
     return div.innerHTML;
+  }
+
+  // Self-verify: merge two AI runs. Disagreements on status → 要確認(warn).
+  function reconcileResults(r1, r2) {
+    const a1 = r1 || {}, a2 = r2 || {};
+    const jp = (s) => s === 'pass' ? '合格' : s === 'fail' ? '不合格' : s === 'na' ? '対象外' : '要確認';
+    const merged = {
+      detected_info: a1.detected_info || a2.detected_info || {},
+      ai_comment: (typeof a1.ai_comment === 'string' && a1.ai_comment) ? a1.ai_comment : (a2.ai_comment || ''),
+      nev_results: {},
+      manual_results: {},
+    };
+    for (const key of ['nev_results', 'manual_results']) {
+      const b1 = a1[key] || {}, b2 = a2[key] || {};
+      const ids = new Set([...Object.keys(b1), ...Object.keys(b2)]);
+      for (const id of ids) {
+        const s1 = b1[id]?.status, s2 = b2[id]?.status;
+        const f1 = (b1[id]?.finding || '').toString();
+        if (s1 && s2 && s1 !== s2) {
+          merged[key][id] = {
+            status: 'warn',
+            finding: `【自己検証】2回の判定が割れました（1回目:${jp(s1)} / 2回目:${jp(s2)}）。要目視確認。${f1 ? ' AI所見: ' + f1 : ''}`,
+          };
+        } else {
+          merged[key][id] = b1[id] || b2[id];
+        }
+      }
+    }
+    return merged;
   }
 
   function boolLabel(v) {

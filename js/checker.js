@@ -417,10 +417,11 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
 2. 配線の色（赤/黒）を正確に判別すること
 3. 条件付き項目は、該当条件が図面から判断できない場合は「warn」
 4. findingには具体的に読み取った文字列・数値を含めること
-5. 全てのチェック項目について必ず判定を返すこと（省略不可）
-6. 正解事例のパターン: 目的地は左側に既設キュービクル(黒)→幹線(赤)→EV分電盤(赤)→分岐(赤)→充電設備(赤)の流れ、基礎は責任分界点→電力量計→分電盤→制御盤→充電設備の流れ
-7. **全ページを必ず確認**: 1ページ目で見つからない情報も2ページ目以降に記載されている可能性がある。全ページを確認してから判定すること
-8. **英字の大文字・小文字は区別しない**: ED=Ed=ed、ELB=Elb等はすべて同一とみなすこと`;
+5. **検出根拠の位置を明記**: fail/warnの項目では、findingの末尾に該当箇所のページ番号と図面上のおおよその位置を「（根拠: P1 右下表題欄付近）」「（根拠: P2 機器リスト）」の形式で付記すること。位置が特定できない場合は「（根拠: 該当記載なし）」と記すこと
+6. 全てのチェック項目について必ず判定を返すこと（省略不可）
+7. 正解事例のパターン: 目的地は左側に既設キュービクル(黒)→幹線(赤)→EV分電盤(赤)→分岐(赤)→充電設備(赤)の流れ、基礎は責任分界点→電力量計→分電盤→制御盤→充電設備の流れ
+8. **全ページを必ず確認**: 1ページ目で見つからない情報も2ページ目以降に記載されている可能性がある。全ページを確認してから判定すること
+9. **英字の大文字・小文字は区別しない**: ED=Ed=ed、ELB=Elb等はすべて同一とみなすこと`;
   }
 
   /* ----------------------------------------------------------
@@ -775,6 +776,102 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
   }
 
   /* ----------------------------------------------------------
+   *  6b. DETERMINISTIC CROSS-CHECK (AI判定の保守的救済)
+   *  AIがpass/naとした項目を、検出値とルール表で機械的に再検証し、
+   *  矛盾があれば「warn(要確認)」へ格上げする（passへの降格はしない）。
+   * ---------------------------------------------------------- */
+  // 主幹ATごとの定格動作台数（100%出力可能台数）
+  function ratedOperatingCount(at) {
+    if (!Number.isFinite(at)) return null;
+    if (at >= 250) return 8;
+    if (at >= 225) return 7;
+    if (at >= 200) return 6;
+    if (at >= 150) return 5;
+    if (at >= 125) return 4;
+    if (at >= 100) return 3;
+    if (at >= 75) return 2;
+    if (at >= 40) return 1;
+    return 0;
+  }
+  // 文字列から先頭の整数を取り出す（"4台"→4, "100AT"→100）
+  function leadingInt(v) {
+    if (v === null || v === undefined) return NaN;
+    const m = String(v).replace(/,/g, '').match(/-?\d+/);
+    return m ? parseInt(m[0], 10) : NaN;
+  }
+  function findAggItem(agg, id) {
+    if (!agg || !agg.categories) return null;
+    for (const cat of Object.values(agg.categories)) {
+      const it = (cat.items || []).find((x) => x.id === id);
+      if (it) return it;
+    }
+    return null;
+  }
+  function recomputeAgg(agg) {
+    if (!agg || !agg.categories) return agg;
+    let totalPass = 0, totalFail = 0, totalWarn = 0;
+    for (const cat of Object.values(agg.categories)) {
+      cat.pass = 0; cat.fail = 0; cat.warn = 0; cat.na = 0;
+      for (const it of (cat.items || [])) {
+        if (cat[it.status] !== undefined) cat[it.status] += 1;
+      }
+      totalPass += cat.pass; totalFail += cat.fail; totalWarn += cat.warn;
+    }
+    agg.totalPass = totalPass; agg.totalFail = totalFail; agg.totalWarn = totalWarn;
+    agg.totalChecked = totalPass + totalFail + totalWarn;
+    let overall = 'pass';
+    if (totalFail > 0) overall = 'fail';
+    else if (totalWarn > 0) overall = 'warn';
+    else if (totalPass === 0) overall = 'warn';
+    agg.overall = overall;
+    return agg;
+  }
+  // pass/na を warn へ格上げ（fail はそのまま）
+  function escalateToWarn(item, note) {
+    if (!item) return false;
+    if (item.status === 'pass' || item.status === 'na') {
+      item.status = 'warn';
+      item.finding = `【自動検証】${note}` + (item.finding && item.finding !== '未判定' ? `（AI所見: ${item.finding}）` : '');
+      return true;
+    }
+    return false;
+  }
+
+  function applyDeterministicChecks(type, detected, nevAgg, manualAgg) {
+    const notes = [];
+    const info = detected || {};
+    const at = leadingInt(info.main_breaker_at);
+    const count = leadingInt(info.charger_count);
+    const rated = ratedOperatingCount(at);
+    const hasDemand = info.has_demand_control === true || info.has_demand_control === 'true';
+
+    // デマンド制御要否の機械検証: 設置台数 > 定格動作台数 かつ デマンド記載なし
+    if (Number.isFinite(count) && Number.isFinite(at) && rated !== null && count > rated && !hasDemand) {
+      const note = `主幹${at}AT（定格動作台数${rated}台）に対し設置台数${count}台のため、デマンドコントロールの記載が必要な可能性があります。図面を目視確認してください。`;
+      if (escalateToWarn(findAggItem(nevAgg, 'nev_demand'), note)) notes.push('NeV: デマンド制御');
+      if (type === 'kiso') {
+        if (escalateToWarn(findAggItem(manualAgg, 'man_k_demand_required'), note)) notes.push('基礎: デマンド要否');
+      } else {
+        if (escalateToWarn(findAggItem(manualAgg, 'man_m_loadbalance'), note)) notes.push('目的地: ローバラ注記');
+      }
+    }
+
+    // 基礎: 主幹ブレーカーATが台数別の規定値と乖離している場合の機械検証
+    if (type === 'kiso' && Number.isFinite(count) && Number.isFinite(at)) {
+      // 台数別の標準主幹AT（6kW仕様）。範囲外・LB有無の差異もあるため warn 止まり。
+      const expectedAt = { 2: 75, 3: 100, 4: 125, 5: 150, 6: 200, 7: 225 }[count];
+      if (expectedAt && at !== expectedAt) {
+        const note = `設置台数${count}台の標準主幹は${expectedAt}AT付近ですが、図面では${at}ATを検出しました。仕様表との整合を目視確認してください。`;
+        if (escalateToWarn(findAggItem(manualAgg, 'man_k_main_breaker'), note)) notes.push('基礎: 主幹ブレーカー容量');
+      }
+    }
+
+    recomputeAgg(nevAgg);
+    recomputeAgg(manualAgg);
+    return { nevAgg, manualAgg, notes };
+  }
+
+  /* ----------------------------------------------------------
    *  7. COST ESTIMATION
    * ---------------------------------------------------------- */
   const MODEL_PRICING = {
@@ -1034,6 +1131,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     checkModelAvailability,
     callGemini,
     aggregateResults,
+    applyDeterministicChecks,
     estimateCost,
     resultToText,
     resultToExcel,
