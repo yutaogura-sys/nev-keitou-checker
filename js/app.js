@@ -62,6 +62,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const costInput = $('#costInput');
   const costOutput = $('#costOutput');
   const costTotal = $('#costTotal');
+  const costCumulativeRow = $('#costCumulativeRow');
+  const costCumulative = $('#costCumulative');
+  const costLimitAlert = $('#costLimitAlert');
+  const costLimitInput = $('#costLimitInput');
+  const cumulativeCostLabel = $('#cumulativeCostLabel');
+  const selfVerifyCheck = $('#selfVerifyCheck');
+  const restoreBanner = $('#restoreBanner');
+  const restoreBannerText = $('#restoreBannerText');
+  const restoreBtn = $('#restoreBtn');
+  const dismissRestoreBtn = $('#dismissRestoreBtn');
   const excelBtn = $('#excelBtn');
   const copyBtn = $('#copyBtn');
   const rerunBtn = $('#rerunBtn');
@@ -70,6 +80,80 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Store last result for export
   let lastResult = null;
+
+  const YEN_RATE = 150; // USD→JPY 概算レート（表示と累計で共通）
+
+  /* ----------------------------------------------------------
+   *  COST TRACKING (累計コスト・上限管理)
+   * ---------------------------------------------------------- */
+  const COST_LIMIT_KEY = 'nev_keitou_cost_limit';
+  const monthKey = () => {
+    const d = new Date();
+    return `nev_keitou_cost_${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+  };
+  function getCostLimit() {
+    try {
+      const v = parseFloat(localStorage.getItem(COST_LIMIT_KEY) || '');
+      return Number.isFinite(v) && v > 0 ? v : 0;
+    } catch { return 0; }
+  }
+  function setCostLimit(v) {
+    try {
+      if (v > 0) localStorage.setItem(COST_LIMIT_KEY, String(v));
+      else localStorage.removeItem(COST_LIMIT_KEY);
+    } catch { /* localStorage unavailable */ }
+  }
+  function getCumulativeCost() {
+    try {
+      const v = parseFloat(localStorage.getItem(monthKey()) || '0');
+      return Number.isFinite(v) && v >= 0 ? v : 0;
+    } catch { return 0; }
+  }
+  function addCumulativeCost(jpy) {
+    if (!Number.isFinite(jpy) || jpy <= 0) return getCumulativeCost();
+    const next = Math.round((getCumulativeCost() + jpy) * 10) / 10;
+    try { localStorage.setItem(monthKey(), String(next)); } catch { /* noop */ }
+    return next;
+  }
+  function updateCumulativeLabel() {
+    const cum = getCumulativeCost();
+    const limit = getCostLimit();
+    if (limit > 0) {
+      cumulativeCostLabel.textContent = `今月の累計: 約${cum.toLocaleString()}円 / 上限 ${limit.toLocaleString()}円`;
+      cumulativeCostLabel.className = 'cost-limit-cumulative' + (cum >= limit ? ' over' : cum >= limit * 0.8 ? ' near' : '');
+    } else if (cum > 0) {
+      cumulativeCostLabel.textContent = `今月の累計: 約${cum.toLocaleString()}円`;
+      cumulativeCostLabel.className = 'cost-limit-cumulative';
+    } else {
+      cumulativeCostLabel.textContent = '';
+      cumulativeCostLabel.className = 'cost-limit-cumulative';
+    }
+  }
+
+  /* ----------------------------------------------------------
+   *  RESULT SNAPSHOT (sessionStorage) — reload recovery
+   * ---------------------------------------------------------- */
+  const SNAPSHOT_KEY = 'nev_keitou_last_result';
+  function saveResultSnapshot(snapshot) {
+    try {
+      sessionStorage.setItem(SNAPSHOT_KEY, JSON.stringify(snapshot));
+    } catch { /* sessionStorage full/unavailable — non-critical */ }
+  }
+  function loadResultSnapshot() {
+    try {
+      const raw = sessionStorage.getItem(SNAPSHOT_KEY);
+      if (!raw) return null;
+      const snap = JSON.parse(raw);
+      // Revive timestamp Date
+      if (snap?.lastResult?.meta?.timestamp) {
+        snap.lastResult.meta.timestamp = new Date(snap.lastResult.meta.timestamp);
+      }
+      return snap;
+    } catch { return null; }
+  }
+  function clearResultSnapshot() {
+    try { sessionStorage.removeItem(SNAPSHOT_KEY); } catch { /* noop */ }
+  }
 
   /* ----------------------------------------------------------
    *  INIT: Load saved API key
@@ -81,6 +165,17 @@ document.addEventListener('DOMContentLoaded', () => {
       state.apiKey = savedKey;
     }
   } catch { /* localStorage unavailable (private browsing etc.) */ }
+
+  // Load saved cost limit
+  const savedLimit = getCostLimit();
+  if (savedLimit > 0) costLimitInput.value = savedLimit;
+  updateCumulativeLabel();
+
+  costLimitInput.addEventListener('input', () => {
+    const v = parseFloat(costLimitInput.value);
+    setCostLimit(Number.isFinite(v) && v > 0 ? v : 0);
+    updateCumulativeLabel();
+  });
 
   /* ----------------------------------------------------------
    *  API KEY HANDLING
@@ -309,6 +404,13 @@ document.addEventListener('DOMContentLoaded', () => {
       // 4. Cost
       const cost = DrawingChecker.estimateCost(usage, runState.selectedModel);
 
+      // Track cumulative cost for the month (real runs only)
+      const runUsd = parseFloat(cost.totalCost);
+      if (Number.isFinite(runUsd) && runUsd > 0) {
+        addCumulativeCost(Math.round(runUsd * YEN_RATE * 10) / 10);
+      }
+      updateCumulativeLabel();
+
       // 5. Build meta (filename / timestamp)
       const meta = { fileName: runState.fileName, timestamp: new Date(), truncated: !!truncated };
 
@@ -325,6 +427,9 @@ document.addEventListener('DOMContentLoaded', () => {
         aiComment: typeof result.ai_comment === 'string' ? result.ai_comment : '',
         meta,
       };
+
+      // Persist a snapshot to sessionStorage so accidental reloads can recover it
+      saveResultSnapshot({ lastResult, cost, usage, modelId: runState.selectedModel });
 
     } catch (e) {
       loadingSection.style.display = 'none';
@@ -475,14 +580,34 @@ document.addEventListener('DOMContentLoaded', () => {
         'gemini-2.5-flash': 'Gemini 2.5 Flash',
         'gemini-2.0-flash': 'Gemini 2.0 Flash',
       };
-      const yenRate = 150;
       const totalUsd = parseFloat(cost.totalCost);
-      const yenEstimate = isNaN(totalUsd) ? 0 : Math.round(totalUsd * yenRate * 10) / 10;
+      const yenEstimate = isNaN(totalUsd) ? 0 : Math.round(totalUsd * YEN_RATE * 10) / 10;
       const note = cost.pricingMatched === false ? '（料金未登録モデル: 概算は2.5-flash基準）' : '';
       costModel.textContent = (modelNames[modelId] || modelId) + note;
       costInput.textContent = `${(usage.promptTokens ?? 0).toLocaleString()} tokens（$${cost.inputCost ?? '0.0000'}）`;
       costOutput.textContent = `${(usage.completionTokens ?? 0).toLocaleString()} tokens（$${cost.outputCost ?? '0.0000'}）`;
       costTotal.textContent = `$${cost.totalCost}（約 ${yenEstimate}円）`;
+
+      // Cumulative + limit alert
+      const cum = getCumulativeCost();
+      const limit = getCostLimit();
+      costCumulativeRow.style.display = 'flex';
+      costCumulative.textContent = limit > 0
+        ? `約 ${cum.toLocaleString()}円 / 上限 ${limit.toLocaleString()}円`
+        : `約 ${cum.toLocaleString()}円`;
+      if (limit > 0 && cum >= limit) {
+        costLimitAlert.style.display = 'block';
+        costLimitAlert.className = 'cost-limit-alert over';
+        const over = Math.round((cum - limit) * 10) / 10;
+        costLimitAlert.textContent = `⚠ 今月の料金上限（${limit.toLocaleString()}円）を超過しています。現在 約${over.toLocaleString()}円分オーバーしています。`;
+      } else if (limit > 0 && cum >= limit * 0.8) {
+        costLimitAlert.style.display = 'block';
+        costLimitAlert.className = 'cost-limit-alert near';
+        const remain = Math.round((limit - cum) * 10) / 10;
+        costLimitAlert.textContent = `⚠ 今月の料金上限に近づいています（残り 約${remain.toLocaleString()}円）。`;
+      } else {
+        costLimitAlert.style.display = 'none';
+      }
     } else {
       costSection.style.display = 'none';
     }
@@ -665,6 +790,7 @@ document.addEventListener('DOMContentLoaded', () => {
     loadingSection.style.display = 'none';
     if (truncationWarning) truncationWarning.style.display = 'none';
     if (resultMeta) { resultMeta.innerHTML = ''; resultMeta.style.display = 'none'; }
+    if (restoreBanner) restoreBanner.style.display = 'none';
     hideStatus();
     lastResult = null;
     clearFile();
@@ -679,6 +805,40 @@ document.addEventListener('DOMContentLoaded', () => {
     if (nevPanel) nevPanel.classList.add('active');
     updateExecuteBtn();
     window.scrollTo({ top: 0, behavior: 'smooth' });
+  });
+
+  /* ----------------------------------------------------------
+   *  RESULT RESTORE (sessionStorage)
+   * ---------------------------------------------------------- */
+  function renderFromSnapshot(snap) {
+    if (!snap || !snap.lastResult) return;
+    const lr = snap.lastResult;
+    const pseudoResult = { detected_info: lr.detected || {}, ai_comment: lr.aiComment || '' };
+    renderResults(pseudoResult, lr.nevAgg, lr.manualAgg, snap.cost, snap.usage, snap.modelId, lr.meta);
+    lastResult = lr;
+  }
+
+  (function initRestore() {
+    const snap = loadResultSnapshot();
+    if (snap && snap.lastResult) {
+      const fname = snap.lastResult.meta?.fileName;
+      restoreBannerText.textContent = fname
+        ? `前回の判定結果（${fname}）が保存されています。`
+        : '前回の判定結果が保存されています。';
+      restoreBanner.style.display = 'flex';
+    }
+  })();
+
+  restoreBtn.addEventListener('click', () => {
+    const snap = loadResultSnapshot();
+    if (snap) {
+      renderFromSnapshot(snap);
+      restoreBanner.style.display = 'none';
+    }
+  });
+  dismissRestoreBtn.addEventListener('click', () => {
+    clearResultSnapshot();
+    restoreBanner.style.display = 'none';
   });
 
   /* ----------------------------------------------------------

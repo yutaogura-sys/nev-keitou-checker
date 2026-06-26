@@ -25,6 +25,16 @@
 
   <!-- ====== MAIN ====== -->
   <main class="main">
+    <!-- Restore previous result -->
+    <div class="restore-banner" id="restoreBanner" style="display:none;">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+      <span id="restoreBannerText">前回の判定結果が保存されています。</span>
+      <div class="restore-banner-actions">
+        <button type="button" id="restoreBtn" class="btn btn-secondary btn-sm">復元する</button>
+        <button type="button" id="dismissRestoreBtn" class="btn btn-secondary btn-sm">破棄</button>
+      </div>
+    </div>
+
     <!-- STEP 1: API Key -->
     <section class="card" id="step-apikey">
       <div class="card-header">
@@ -147,7 +157,16 @@
         <h2 class="card-title">チェック実行</h2>
       </div>
       <div class="card-body">
+        <div class="cost-limit-row">
+          <label class="cost-limit-label" for="costLimitInput">今月の料金上限（円・任意）</label>
+          <input type="number" id="costLimitInput" class="input-field cost-limit-input" min="0" step="100" placeholder="例: 5000">
+          <span class="cost-limit-cumulative" id="cumulativeCostLabel"></span>
+        </div>
         <p class="card-desc" id="executeDesc">全てのステップを完了してからチェックを実行してください。</p>
+        <label class="checkbox-label self-verify-label">
+          <input type="checkbox" id="selfVerifyCheck">
+          <span>自己検証モード（2回実行して判定のブレを抑制 / API料金は約2倍）</span>
+        </label>
         <button type="button" id="executeBtn" class="btn btn-primary btn-large" disabled>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
           チェック実行
@@ -242,6 +261,7 @@
             <h3 class="cost-title">💰 Gemini API 料金目安（税別）</h3>
             <span class="cost-note">※ 概算値です。実際の請求額とは異なる場合があります</span>
           </div>
+          <div class="cost-limit-alert" id="costLimitAlert" style="display:none;"></div>
           <div class="cost-details">
             <div class="cost-row">
               <span class="cost-label">モデル</span>
@@ -256,8 +276,12 @@
               <span class="cost-value" id="costOutput"></span>
             </div>
             <div class="cost-row cost-row-total">
-              <span class="cost-label">合計（概算）</span>
+              <span class="cost-label">今回の合計（概算）</span>
               <span class="cost-value cost-total" id="costTotal"></span>
+            </div>
+            <div class="cost-row cost-row-cumulative" id="costCumulativeRow" style="display:none;">
+              <span class="cost-label">今月の累計（概算）</span>
+              <span class="cost-value" id="costCumulative"></span>
             </div>
           </div>
         </div>
