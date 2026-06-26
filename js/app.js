@@ -77,6 +77,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const restoreBannerText = $('#restoreBannerText');
   const restoreBtn = $('#restoreBtn');
   const dismissRestoreBtn = $('#dismissRestoreBtn');
+  const historyCard = $('#historyCard');
+  const historyList = $('#historyList');
+  const clearHistoryBtn = $('#clearHistoryBtn');
   const excelBtn = $('#excelBtn');
   const copyBtn = $('#copyBtn');
   const rerunBtn = $('#rerunBtn');
@@ -158,6 +161,70 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   function clearResultSnapshot() {
     try { sessionStorage.removeItem(SNAPSHOT_KEY); } catch { /* noop */ }
+  }
+
+  /* ----------------------------------------------------------
+   *  HISTORY (localStorage) — 最新N件
+   * ---------------------------------------------------------- */
+  const HISTORY_KEY = 'nev_keitou_history';
+  const HISTORY_MAX = 10;
+  function getHistory() {
+    try {
+      const arr = JSON.parse(localStorage.getItem(HISTORY_KEY) || '[]');
+      return Array.isArray(arr) ? arr : [];
+    } catch { return []; }
+  }
+  function saveHistory(arr) {
+    try {
+      localStorage.setItem(HISTORY_KEY, JSON.stringify(arr));
+    } catch {
+      // Quota exceeded — drop oldest entries and retry once
+      try { localStorage.setItem(HISTORY_KEY, JSON.stringify(arr.slice(0, 5))); } catch { /* give up */ }
+    }
+  }
+  function pushHistory(snapshot) {
+    const lr = snapshot?.lastResult;
+    if (!lr) return;
+    const entry = {
+      id: Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+      fileName: lr.meta?.fileName || '(無題)',
+      type: lr.type,
+      timestamp: lr.meta?.timestamp instanceof Date ? lr.meta.timestamp.toISOString() : new Date().toISOString(),
+      nevOverall: lr.nevAgg?.overall || 'warn',
+      manualOverall: lr.manualAgg?.overall || 'warn',
+      snapshot,
+    };
+    const arr = getHistory();
+    arr.unshift(entry);
+    saveHistory(arr.slice(0, HISTORY_MAX));
+    renderHistory();
+  }
+  function clearHistory() {
+    try { localStorage.removeItem(HISTORY_KEY); } catch { /* noop */ }
+    renderHistory();
+  }
+  function renderHistory() {
+    const arr = getHistory();
+    if (!arr.length) {
+      historyCard.style.display = 'none';
+      historyList.innerHTML = '';
+      return;
+    }
+    historyCard.style.display = 'block';
+    historyList.innerHTML = arr.map((e) => {
+      const typeLabel = e.type === 'kiso' ? '基礎' : '目的地';
+      let ts = e.timestamp;
+      try { ts = new Date(e.timestamp).toLocaleString('ja-JP'); } catch { /* keep raw */ }
+      return `<button type="button" class="history-item" data-id="${escapeHtml(e.id)}">
+        <span class="history-file">📄 ${escapeHtml(e.fileName)}</span>
+        <span class="history-meta">
+          <span class="history-type">${typeLabel}</span>
+          <span class="history-badge ${e.nevOverall}">NeV: ${statusLabel(e.nevOverall)}</span>
+          <span class="history-badge ${e.manualOverall}">マニュアル: ${statusLabel(e.manualOverall)}</span>
+        </span>
+        <span class="history-time">${escapeHtml(ts)}</span>
+      </button>`;
+    }).join('');
   }
 
   /* ----------------------------------------------------------
@@ -528,7 +595,9 @@ document.addEventListener('DOMContentLoaded', () => {
       };
 
       // Persist a snapshot to sessionStorage so accidental reloads can recover it
-      saveResultSnapshot({ lastResult, cost, usage, modelId: runState.selectedModel });
+      const snapshot = { lastResult, cost, usage, modelId: runState.selectedModel };
+      saveResultSnapshot(snapshot);
+      pushHistory(snapshot);
 
     } catch (e) {
       loadingSection.style.display = 'none';
@@ -980,6 +1049,25 @@ document.addEventListener('DOMContentLoaded', () => {
     clearResultSnapshot();
     restoreBanner.style.display = 'none';
   });
+
+  // History: click an entry to re-display it
+  historyList.addEventListener('click', (e) => {
+    const item = e.target.closest('.history-item');
+    if (!item) return;
+    const id = item.dataset.id;
+    const entry = getHistory().find((x) => x.id === id);
+    if (entry && entry.snapshot) {
+      const snap = entry.snapshot;
+      if (snap.lastResult?.meta?.timestamp && typeof snap.lastResult.meta.timestamp === 'string') {
+        snap.lastResult.meta.timestamp = new Date(snap.lastResult.meta.timestamp);
+      }
+      renderFromSnapshot(snap);
+    }
+  });
+  clearHistoryBtn.addEventListener('click', () => {
+    if (confirm('判定履歴を全て削除しますか？')) clearHistory();
+  });
+  renderHistory();
 
   /* ----------------------------------------------------------
    *  INIT

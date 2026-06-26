@@ -964,6 +964,66 @@ body {
   flex-wrap: wrap;
 }
 
+/* --- History --- */
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.history-item {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 14px;
+  border: 1px solid var(--gray-200);
+  border-radius: var(--radius-sm);
+  background: var(--gray-50);
+  cursor: pointer;
+  font-family: var(--font);
+  transition: all var(--transition);
+}
+.history-item:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+.history-file {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-800);
+  word-break: break-all;
+}
+.history-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.history-type {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gray-600);
+  background: var(--gray-200);
+  padding: 1px 8px;
+  border-radius: 20px;
+}
+.history-badge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 1px 8px;
+  border-radius: 20px;
+}
+.history-badge.pass { background: var(--success-light); color: var(--success); }
+.history-badge.fail { background: var(--danger-light); color: var(--danger); }
+.history-badge.warn { background: var(--warning-light); color: var(--warning); }
+.history-time {
+  font-size: 11px;
+  color: var(--gray-500);
+  margin-left: auto;
+}
+
 /* --- Footer --- */
 .footer {
   text-align: center;
