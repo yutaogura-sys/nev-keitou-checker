@@ -937,6 +937,25 @@ body {
   font-weight: 600;
 }
 
+/* --- Print --- */
+@media print {
+  body { background: #fff; color: #000; }
+  .header { position: static; box-shadow: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .footer, .result-actions, .result-tabs, .restore-banner,
+  #step-apikey, #step-type, #step-upload, #step-execute,
+  #loadingSection, #errorSection, #cancelBtn { display: none !important; }
+  .main { padding: 0; max-width: none; gap: 0; }
+  .card { box-shadow: none; border: 1px solid #ccc; break-inside: avoid; }
+  /* Show both tab panels when printing */
+  .tab-content { display: block !important; }
+  .tab-content + .tab-content { margin-top: 16px; }
+  /* Expand all collapsed categories */
+  .category-items.collapsed { display: block !important; }
+  .category-chevron { display: none; }
+  .check-item { break-inside: avoid; }
+  .overall-badge, .detected-item, .cost-card { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+}
+
 /* --- Responsive --- */
 @media (max-width: 640px) {
   .header-title { font-size: 15px; }

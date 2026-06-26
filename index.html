@@ -3,6 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdnjs.cloudflare.com https://cdn.sheetjs.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://generativelanguage.googleapis.com https://cdnjs.cloudflare.com; worker-src 'self' blob: https://cdnjs.cloudflare.com; object-src 'none'; base-uri 'self'; form-action 'none'">
   <title>電気系統図 要件判定チェックツール</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -46,8 +47,8 @@
         <div class="apikey-input-row">
           <div class="input-wrapper">
             <input type="password" id="apiKeyInput" class="input-field" placeholder="AIza...">
-            <button type="button" id="apiKeyToggle" class="btn-icon" title="表示/非表示">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            <button type="button" id="apiKeyToggle" class="btn-icon" title="表示/非表示" aria-label="APIキーの表示/非表示を切り替え">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
             </button>
           </div>
         </div>
@@ -88,7 +89,7 @@
             接続テスト
           </button>
         </div>
-        <div id="apiKeyStatus" class="status-message" style="display:none;"></div>
+        <div id="apiKeyStatus" class="status-message" style="display:none;" role="status" aria-live="polite"></div>
       </div>
     </section>
 
@@ -141,8 +142,8 @@
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
             <span id="fileName"></span>
             <span id="fileSize" class="file-size"></span>
-            <button type="button" id="fileClear" class="btn-icon btn-danger-icon" title="削除">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+            <button type="button" id="fileClear" class="btn-icon btn-danger-icon" title="削除" aria-label="アップロードしたファイルを削除">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
             </button>
           </div>
           <div id="pdfPreview" class="pdf-preview"></div>
@@ -175,9 +176,9 @@
     </section>
 
     <!-- Loading -->
-    <section class="card loading-section" id="loadingSection" style="display:none;">
+    <section class="card loading-section" id="loadingSection" style="display:none;" role="status" aria-live="polite">
       <div class="card-body loading-body">
-        <div class="spinner"></div>
+        <div class="spinner" aria-hidden="true"></div>
         <p class="loading-text" id="loadingText">図面を解析中です...</p>
         <p class="loading-sub">Gemini APIで高精度な読み取りを行っています。しばらくお待ちください。</p>
         <button type="button" id="cancelBtn" class="btn btn-secondary">
@@ -188,7 +189,7 @@
     </section>
 
     <!-- Error -->
-    <section class="card error-section" id="errorSection" style="display:none;">
+    <section class="card error-section" id="errorSection" style="display:none;" role="alert" aria-live="assertive">
       <div class="card-body">
         <div class="error-content">
           <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
@@ -228,24 +229,24 @@
         </div>
 
         <!-- Tabs -->
-        <div class="result-tabs">
-          <button type="button" class="tab-btn active" data-tab="nev">
+        <div class="result-tabs" role="tablist" aria-label="判定カテゴリ">
+          <button type="button" class="tab-btn active" data-tab="nev" id="tabbtn-nev" role="tab" aria-selected="true" aria-controls="tab-nev">
             NeV要件判定
             <span class="tab-badge" id="nevTabBadge"></span>
           </button>
-          <button type="button" class="tab-btn" data-tab="manual">
+          <button type="button" class="tab-btn" data-tab="manual" id="tabbtn-manual" role="tab" aria-selected="false" aria-controls="tab-manual">
             作図センターマニュアル判定
             <span class="tab-badge" id="manualTabBadge"></span>
           </button>
         </div>
 
         <!-- NeV Tab Content -->
-        <div class="tab-content active" id="tab-nev">
+        <div class="tab-content active" id="tab-nev" role="tabpanel" aria-labelledby="tabbtn-nev">
           <div id="nevResults"></div>
         </div>
 
         <!-- Manual Tab Content -->
-        <div class="tab-content" id="tab-manual">
+        <div class="tab-content" id="tab-manual" role="tabpanel" aria-labelledby="tabbtn-manual">
           <div id="manualResults"></div>
         </div>
 
@@ -316,11 +317,13 @@
   </footer>
 
   <!-- Scripts -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"></script>
-  <script>
-    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-  </script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+          integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e"
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js"
+          integrity="sha384-EnyY0/GSHQGSxSgMwaIPzSESbqoOLSexfnSMN2AP+39Ckmn92stwABZynq1JyzdT"
+          crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="js/pdf-worker-config.js"></script>
   <script src="js/checker.js"></script>
   <script src="js/app.js"></script>
 </body>

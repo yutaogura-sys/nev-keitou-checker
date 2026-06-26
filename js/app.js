@@ -694,8 +694,8 @@ document.addEventListener('DOMContentLoaded', () => {
       const collapsedClass = hasIssue ? '' : 'collapsed';
 
       return `<div class="category-group ${openClass}">
-        <div class="category-header">
-          <span class="category-icon">${meta.icon}</span>
+        <div class="category-header" role="button" tabindex="0" aria-expanded="${hasIssue ? 'true' : 'false'}">
+          <span class="category-icon" aria-hidden="true">${meta.icon}</span>
           <span class="category-title">${escapeHtml(meta.title)}</span>
           <div class="category-summary">${summaryParts.join('')}</div>
           <svg class="category-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
@@ -762,14 +762,25 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----------------------------------------------------------
    *  CATEGORY TOGGLE (event delegation)
    * ---------------------------------------------------------- */
-  document.addEventListener('click', (e) => {
-    const header = e.target.closest('.category-header');
-    if (!header) return;
+  function toggleCategory(header) {
     const group = header.closest('.category-group');
     if (!group) return;
     group.classList.toggle('open');
     const items = group.querySelector('.category-items');
     if (items) items.classList.toggle('collapsed');
+    header.setAttribute('aria-expanded', group.classList.contains('open') ? 'true' : 'false');
+  }
+  document.addEventListener('click', (e) => {
+    const header = e.target.closest('.category-header');
+    if (header) toggleCategory(header);
+  });
+  // Keyboard support for collapsible category headers
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const header = e.target.closest && e.target.closest('.category-header');
+    if (!header) return;
+    e.preventDefault();
+    toggleCategory(header);
   });
 
   /* ----------------------------------------------------------
@@ -777,9 +788,10 @@ document.addEventListener('DOMContentLoaded', () => {
    * ---------------------------------------------------------- */
   tabBtns.forEach((btn) => {
     btn.addEventListener('click', () => {
-      tabBtns.forEach((b) => b.classList.remove('active'));
+      tabBtns.forEach((b) => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
       $$('.tab-content').forEach((c) => c.classList.remove('active'));
       btn.classList.add('active');
+      btn.setAttribute('aria-selected', 'true');
       const tabContent = $(`#tab-${btn.dataset.tab}`);
       if (tabContent) tabContent.classList.add('active');
     });
@@ -850,10 +862,10 @@ document.addEventListener('DOMContentLoaded', () => {
     typeCards.forEach((c) => c.classList.remove('active'));
     state.selectedType = null;
     // Reset tabs to NeV (find by data-attribute, not array index)
-    tabBtns.forEach((b) => b.classList.remove('active'));
+    tabBtns.forEach((b) => { b.classList.remove('active'); b.setAttribute('aria-selected', 'false'); });
     $$('.tab-content').forEach((c) => c.classList.remove('active'));
     const nevTab = Array.from(tabBtns).find(b => b.dataset.tab === 'nev');
-    if (nevTab) nevTab.classList.add('active');
+    if (nevTab) { nevTab.classList.add('active'); nevTab.setAttribute('aria-selected', 'true'); }
     const nevPanel = $('#tab-nev');
     if (nevPanel) nevPanel.classList.add('active');
     updateExecuteBtn();
