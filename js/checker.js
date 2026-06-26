@@ -554,10 +554,15 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     return resp.ok;
   }
 
-  async function callGemini(apiKey, images, type, modelId) {
+  const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
+
+  async function callGemini(apiKey, images, type, modelId, opts = {}) {
     if (!apiKey) throw new Error('APIキーが指定されていません。');
     if (!modelId) throw new Error('モデルIDが指定されていません。');
     if (!images || images.length === 0) throw new Error('画像が空のためAPI呼び出しができません。');
+
+    const signal = opts.signal || null;
+    const onRetry = typeof opts.onRetry === 'function' ? opts.onRetry : () => {};
 
     const prompt = buildPrompt(type);
 
@@ -574,7 +579,8 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       });
     }
 
-    const maxTokens = modelId.includes('2.0-flash') ? 8192 : 65536;
+    // 16384/32768 is sufficient for the structured JSON; caps runaway response time
+    const maxTokens = modelId.includes('2.0-flash') ? 8192 : modelId.includes('pro') ? 32768 : 16384;
 
     const body = {
       contents: [{ parts }],
@@ -584,14 +590,44 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
       },
     };
 
-    const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
+    // Fetch with retry on transient (5xx / network) errors. Never retry on abort, 4xx, or 429.
+    const MAX_RETRIES = 2;
+    const BACKOFF_MS = [1000, 3000];
+    let resp;
+    let attempt = 0;
+    for (;;) {
+      if (signal?.aborted) throw new DOMException('Aborted', 'AbortError');
+      try {
+        resp = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${modelId}:generateContent?key=${apiKey}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+            signal,
+          }
+        );
+      } catch (e) {
+        if (e?.name === 'AbortError') throw e;
+        // Network error: retry if attempts remain
+        if (attempt < MAX_RETRIES) {
+          onRetry(attempt + 1, MAX_RETRIES);
+          await sleep(BACKOFF_MS[attempt] || 3000);
+          attempt++;
+          continue;
+        }
+        throw new Error('ネットワークエラー: ' + (e?.message || e));
       }
-    );
+
+      // Retry on 5xx server errors
+      if (resp.status >= 500 && attempt < MAX_RETRIES) {
+        onRetry(attempt + 1, MAX_RETRIES);
+        await sleep(BACKOFF_MS[attempt] || 3000);
+        attempt++;
+        continue;
+      }
+      break;
+    }
 
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
@@ -790,12 +826,15 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
   /* ----------------------------------------------------------
    *  8. TEXT EXPORT
    * ---------------------------------------------------------- */
-  function resultToText(type, detected, nevAgg, manualAgg, aiComment) {
+  function resultToText(type, detected, nevAgg, manualAgg, aiComment, meta) {
     const typeLabel = type === 'kiso' ? '基礎充電' : '目的地充電';
+    const tsDate = (meta && meta.timestamp instanceof Date) ? meta.timestamp : new Date();
     const lines = [];
     lines.push('='.repeat(60));
     lines.push(`電気系統図 要件判定チェック結果（${typeLabel}）`);
-    lines.push(`判定日時: ${new Date().toLocaleString('ja-JP')}`);
+    if (meta && meta.fileName) lines.push(`対象ファイル: ${meta.fileName}`);
+    lines.push(`判定日時: ${tsDate.toLocaleString('ja-JP')}`);
+    if (meta && meta.truncated) lines.push('※ 注意: AIの応答が途中で切れた可能性があります（出力上限到達）。一部判定が欠落している場合があります。');
     lines.push('='.repeat(60));
 
     // Helper: filter and join non-empty strings
@@ -858,12 +897,13 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
   /* ----------------------------------------------------------
    *  9. EXCEL EXPORT
    * ---------------------------------------------------------- */
-  function resultToExcel(type, detected, nevAgg, manualAgg, aiComment) {
+  function resultToExcel(type, detected, nevAgg, manualAgg, aiComment, meta) {
     if (typeof XLSX === 'undefined') {
       throw new Error('Excelライブラリ(SheetJS)が読み込まれていません。ページを再読み込みしてください。');
     }
     const typeLabel = type === 'kiso' ? '基礎充電' : '目的地充電';
-    const now = new Date().toLocaleString('ja-JP');
+    const tsDate = (meta && meta.timestamp instanceof Date) ? meta.timestamp : new Date();
+    const now = tsDate.toLocaleString('ja-JP');
     const wb = XLSX.utils.book_new();
 
     // Helpers
@@ -892,8 +932,10 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     const summaryData = [
       ['電気系統図 要件判定チェック結果'],
       [],
+      ['対象ファイル', (meta && meta.fileName) ? meta.fileName : '-'],
       ['判定日時', now],
       ['図面種別', typeLabel],
+      ...(meta && meta.truncated ? [['※ 注意', 'AIの応答が途中で切れた可能性があります（出力上限到達）。一部判定が欠落している場合があります。']] : []),
       [],
       ['■ NeV要件判定'],
       ['総合判定', sNev.overall === 'pass' ? '合格' : sNev.overall === 'fail' ? '不合格' : '要確認'],

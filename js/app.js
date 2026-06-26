@@ -15,6 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     selectedType: null, // 'mokutekichi' | 'kiso'
     file: null,
     isExecuting: false,
+    abortController: null,
   };
 
   /* ----------------------------------------------------------
@@ -40,11 +41,14 @@ document.addEventListener('DOMContentLoaded', () => {
   const executeDesc = $('#executeDesc');
   const loadingSection = $('#loadingSection');
   const loadingText = $('#loadingText');
+  const cancelBtn = $('#cancelBtn');
   const errorSection = $('#errorSection');
   const errorTitle = $('#errorTitle');
   const errorMessage = $('#errorMessage');
   const retryBtn = $('#retryBtn');
   const resultSection = $('#resultSection');
+  const resultMeta = $('#resultMeta');
+  const truncationWarning = $('#truncationWarning');
   const overallBadges = $('#overallBadges');
   const detectedGrid = $('#detectedGrid');
   const nevResults = $('#nevResults');
@@ -60,6 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const costTotal = $('#costTotal');
   const excelBtn = $('#excelBtn');
   const copyBtn = $('#copyBtn');
+  const rerunBtn = $('#rerunBtn');
   const newCheckBtn = $('#newCheckBtn');
   const tabBtns = $$('.tab-btn');
 
@@ -254,12 +259,17 @@ document.addEventListener('DOMContentLoaded', () => {
     executeBtn.disabled = true;
     retryBtn.disabled = true;
 
+    // Abort controller for cancellation
+    const abortController = new AbortController();
+    state.abortController = abortController;
+
     // Snapshot state at execution start to avoid mid-run mutation
     const runState = {
       apiKey: state.apiKey,
       selectedType: state.selectedType,
       selectedModel: state.selectedModel,
       file: state.file,
+      fileName: state.file.name,
     };
 
     // Clear previous result so stale data isn't exported on failure
@@ -274,17 +284,21 @@ document.addEventListener('DOMContentLoaded', () => {
     try {
       // 1. PDF to images
       const { images, totalPages, renderedPages } = await DrawingChecker.pdfToImages(runState.file);
+      if (abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError');
       loadingText.textContent = `Gemini APIで解析中... (${renderedPages}/${totalPages}ページ)`;
 
-      // 2. Call Gemini
+      // 2. Call Gemini (with cancellation + transient-error retry)
       const { result, usage, truncated } = await DrawingChecker.callGemini(
-        runState.apiKey, images, runState.selectedType, runState.selectedModel
+        runState.apiKey, images, runState.selectedType, runState.selectedModel,
+        {
+          signal: abortController.signal,
+          onRetry: (n, max) => {
+            loadingText.textContent = `通信エラーのため再試行中... (${n}/${max})`;
+          },
+        }
       );
 
       if (!result) throw new Error('APIから空の結果が返されました。');
-      if (truncated) {
-        console.warn('Gemini output was truncated (MAX_TOKENS)');
-      }
 
       // 3. Aggregate results
       const checkItems = DrawingChecker.getCheckItems(runState.selectedType);
@@ -295,9 +309,12 @@ document.addEventListener('DOMContentLoaded', () => {
       // 4. Cost
       const cost = DrawingChecker.estimateCost(usage, runState.selectedModel);
 
-      // 5. Render
+      // 5. Build meta (filename / timestamp)
+      const meta = { fileName: runState.fileName, timestamp: new Date(), truncated: !!truncated };
+
+      // 6. Render
       loadingSection.style.display = 'none';
-      renderResults(result, nevAgg, manualAgg, cost, usage, runState.selectedModel);
+      renderResults(result, nevAgg, manualAgg, cost, usage, runState.selectedModel, meta);
 
       // Store for export (with safe defaults to prevent crash on missing fields)
       lastResult = {
@@ -306,21 +323,40 @@ document.addEventListener('DOMContentLoaded', () => {
         nevAgg,
         manualAgg,
         aiComment: typeof result.ai_comment === 'string' ? result.ai_comment : '',
+        meta,
       };
 
     } catch (e) {
       loadingSection.style.display = 'none';
-      if (e instanceof TypeError && e.message.includes('fetch')) {
+      if (e?.name === 'AbortError') {
+        // User cancelled — return to a clean state without an error banner
+        // (results stay hidden; nothing to show)
+      } else if (e instanceof TypeError && e.message.includes('fetch')) {
         showError(new Error('ネットワーク接続を確認してください。インターネットに接続されていない可能性があります。'));
       } else {
         showError(e);
       }
     } finally {
       state.isExecuting = false;
+      state.abortController = null;
       retryBtn.disabled = false;
       updateExecuteBtn();
     }
   }
+
+  // Cancel in-flight request
+  cancelBtn.addEventListener('click', () => {
+    if (state.abortController) {
+      state.abortController.abort();
+    }
+    loadingSection.style.display = 'none';
+  });
+
+  // Re-run on the same PDF (respects current model selection)
+  rerunBtn.addEventListener('click', () => {
+    if (state.isExecuting) return;
+    runCheck();
+  });
 
   function showError(error) {
     errorSection.style.display = 'block';
@@ -342,8 +378,24 @@ document.addEventListener('DOMContentLoaded', () => {
   /* ----------------------------------------------------------
    *  RENDER RESULTS
    * ---------------------------------------------------------- */
-  function renderResults(result, nevAgg, manualAgg, cost, usage, modelId) {
+  function renderResults(result, nevAgg, manualAgg, cost, usage, modelId, meta) {
     resultSection.style.display = 'block';
+
+    // Result meta: filename + timestamp
+    if (meta) {
+      const ts = meta.timestamp instanceof Date ? meta.timestamp.toLocaleString('ja-JP') : '';
+      const parts = [];
+      if (meta.fileName) parts.push(`<span class="result-meta-file">📄 ${escapeHtml(meta.fileName)}</span>`);
+      if (ts) parts.push(`<span class="result-meta-time">判定日時: ${escapeHtml(ts)}</span>`);
+      resultMeta.innerHTML = parts.join('');
+      resultMeta.style.display = parts.length ? 'flex' : 'none';
+    } else {
+      resultMeta.innerHTML = '';
+      resultMeta.style.display = 'none';
+    }
+
+    // Truncation warning
+    truncationWarning.style.display = (meta && meta.truncated) ? 'flex' : 'none';
 
     // Overall badges
     overallBadges.innerHTML = `
@@ -562,7 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!lastResult) return;
     try {
       DrawingChecker.resultToExcel(
-        lastResult.type, lastResult.detected, lastResult.nevAgg, lastResult.manualAgg, lastResult.aiComment
+        lastResult.type, lastResult.detected, lastResult.nevAgg, lastResult.manualAgg, lastResult.aiComment, lastResult.meta
       );
     } catch (e) {
       alert('Excel出力に失敗しました: ' + e.message);
@@ -585,7 +637,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (!lastResult) return;
     try {
       const text = DrawingChecker.resultToText(
-        lastResult.type, lastResult.detected, lastResult.nevAgg, lastResult.manualAgg, lastResult.aiComment
+        lastResult.type, lastResult.detected, lastResult.nevAgg, lastResult.manualAgg, lastResult.aiComment, lastResult.meta
       );
       navigator.clipboard.writeText(text).then(showCopiedFeedback).catch(() => {
         const ta = document.createElement('textarea');
@@ -611,6 +663,8 @@ document.addEventListener('DOMContentLoaded', () => {
     aiCommentSection.style.display = 'none';
     costSection.style.display = 'none';
     loadingSection.style.display = 'none';
+    if (truncationWarning) truncationWarning.style.display = 'none';
+    if (resultMeta) { resultMeta.innerHTML = ''; resultMeta.style.display = 'none'; }
     hideStatus();
     lastResult = null;
     clearFile();
