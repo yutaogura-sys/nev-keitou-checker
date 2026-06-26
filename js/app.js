@@ -16,7 +16,9 @@ document.addEventListener('DOMContentLoaded', () => {
     file: null,
     isExecuting: false,
     abortController: null,
+    selectedPages: null, // null = default (first N pages)
   };
+  const MAX_ANALYZE_PAGES = 6;
 
   /* ----------------------------------------------------------
    *  DOM ELEMENTS
@@ -37,6 +39,9 @@ document.addEventListener('DOMContentLoaded', () => {
   const fileSize = $('#fileSize');
   const fileClear = $('#fileClear');
   const pdfPreview = $('#pdfPreview');
+  const pageSelectSection = $('#pageSelectSection');
+  const pageSelectGrid = $('#pageSelectGrid');
+  const pageSelectCount = $('#pageSelectCount');
   const executeBtn = $('#executeBtn');
   const executeDesc = $('#executeDesc');
   const loadingSection = $('#loadingSection');
@@ -303,18 +308,87 @@ document.addEventListener('DOMContentLoaded', () => {
       pdfPreview.textContent = '';
       pdfPreview.appendChild(img);
     } catch {
-      pdfPreview.innerHTML = '<p style="padding:20px;color:var(--gray-400);">プレビューを生成できませんでした</p>';
+      pdfPreview.innerHTML = '<p style="padding:20px;color:var(--gray-500);">プレビューを生成できませんでした</p>';
+    }
+
+    // Page selection (multi-page PDFs)
+    state.selectedPages = null;
+    try {
+      const { totalPages, thumbs, maxAnalyze } = await DrawingChecker.pdfGetPageThumbnails(file);
+      buildPageSelect(totalPages, thumbs, maxAnalyze || MAX_ANALYZE_PAGES);
+    } catch {
+      pageSelectSection.style.display = 'none';
     }
 
     updateExecuteBtn();
   }
 
+  function buildPageSelect(totalPages, thumbs, maxAnalyze) {
+    pageSelectGrid.innerHTML = '';
+    if (!totalPages || totalPages <= 1) {
+      pageSelectSection.style.display = 'none';
+      state.selectedPages = null; // single page → default
+      return;
+    }
+    pageSelectSection.style.display = 'block';
+    pageSelectCount.textContent = thumbs.length < totalPages
+      ? `（全${totalPages}ページ中 先頭${thumbs.length}ページを表示）`
+      : '';
+    const defaultChecked = Math.min(totalPages, maxAnalyze);
+    thumbs.forEach((t) => {
+      const checked = t.pageNumber <= defaultChecked;
+      const label = document.createElement('label');
+      label.className = 'page-thumb' + (checked ? ' selected' : '');
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.value = String(t.pageNumber);
+      cb.checked = checked;
+      cb.addEventListener('change', () => onPageToggle(maxAnalyze));
+      const img = document.createElement('img');
+      img.src = t.dataUrl;
+      img.alt = `${t.pageNumber}ページ目`;
+      const cap = document.createElement('span');
+      cap.className = 'page-thumb-cap';
+      cap.textContent = `P${t.pageNumber}`;
+      label.appendChild(cb);
+      label.appendChild(img);
+      label.appendChild(cap);
+      pageSelectGrid.appendChild(label);
+    });
+    syncSelectedPages();
+  }
+
+  function pageCheckboxes() {
+    return Array.from(pageSelectGrid.querySelectorAll('input[type="checkbox"]'));
+  }
+  function onPageToggle(maxAnalyze) {
+    const checked = pageCheckboxes().filter((c) => c.checked);
+    if (checked.length > maxAnalyze) {
+      // Revert: too many selected
+      alert(`解析できるのは最大${maxAnalyze}ページまでです。`);
+      // uncheck the last one toggled on beyond the limit — simplest: uncheck extras
+      checked.slice(maxAnalyze).forEach((c) => { c.checked = false; });
+    }
+    syncSelectedPages();
+  }
+  function syncSelectedPages() {
+    const pages = pageCheckboxes().filter((c) => c.checked).map((c) => parseInt(c.value, 10));
+    pageCheckboxes().forEach((c) => {
+      c.closest('.page-thumb')?.classList.toggle('selected', c.checked);
+    });
+    state.selectedPages = pages.length ? pages : null;
+    updateExecuteBtn();
+  }
+
   function clearFile() {
     state.file = null;
+    state.selectedPages = null;
     fileInput.value = '';
     uploadArea.style.display = '';
     fileInfo.style.display = 'none';
     pdfPreview.innerHTML = '';
+    if (pageSelectSection) pageSelectSection.style.display = 'none';
+    if (pageSelectGrid) pageSelectGrid.innerHTML = '';
     updateExecuteBtn();
   }
 
@@ -366,6 +440,7 @@ document.addEventListener('DOMContentLoaded', () => {
       file: state.file,
       fileName: state.file.name,
       selfVerify: !!(selfVerifyCheck && selfVerifyCheck.checked),
+      selectedPages: state.selectedPages ? [...state.selectedPages] : null,
     };
 
     // Clear previous result so stale data isn't exported on failure
@@ -378,8 +453,8 @@ document.addEventListener('DOMContentLoaded', () => {
     loadingText.textContent = 'PDFを画像に変換中...';
 
     try {
-      // 1. PDF to images
-      const { images, totalPages, renderedPages } = await DrawingChecker.pdfToImages(runState.file);
+      // 1. PDF to images (only selected pages, if any)
+      const { images, totalPages, renderedPages } = await DrawingChecker.pdfToImages(runState.file, runState.selectedPages);
       if (abortController.signal.aborted) throw new DOMException('Aborted', 'AbortError');
       loadingText.textContent = `Gemini APIで解析中... (${renderedPages}/${totalPages}ページ)`;
 

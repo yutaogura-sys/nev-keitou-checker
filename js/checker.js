@@ -427,7 +427,9 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
   /* ----------------------------------------------------------
    *  4. PDF TO IMAGES
    * ---------------------------------------------------------- */
-  async function pdfToImages(file) {
+  const MAX_ANALYZE_PAGES = 6;
+
+  async function pdfToImages(file, selectedPages) {
     if (typeof pdfjsLib === 'undefined') {
       throw new Error('PDF.jsライブラリが読み込まれていません。ページを再読み込みしてください。');
     }
@@ -445,11 +447,24 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     try {
       const totalPages = pdf.numPages;
       if (totalPages === 0) throw new Error('PDFにページがありません。');
-      const maxPages = 6;
-      const pagesToRender = Math.min(totalPages, maxPages);
+
+      // Determine which pages to render
+      let targetPages;
+      if (Array.isArray(selectedPages) && selectedPages.length > 0) {
+        targetPages = [...new Set(selectedPages)]
+          .filter((n) => Number.isInteger(n) && n >= 1 && n <= totalPages)
+          .sort((a, b) => a - b)
+          .slice(0, MAX_ANALYZE_PAGES);
+      }
+      if (!targetPages || targetPages.length === 0) {
+        // Default: first N pages
+        targetPages = [];
+        for (let i = 1; i <= Math.min(totalPages, MAX_ANALYZE_PAGES); i++) targetPages.push(i);
+      }
+
       const images = [];
 
-      for (let i = 1; i <= pagesToRender; i++) {
+      for (const i of targetPages) {
         const page = await pdf.getPage(i);
         const viewport = page.getViewport({ scale: 1 });
 
@@ -491,9 +506,49 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
         }
       }
 
-      return { images, totalPages, renderedPages: pagesToRender };
+      return { images, totalPages, renderedPages: images.length };
     } finally {
       // Always release pdf.js worker resources
+      try { await pdf.destroy(); } catch { /* noop */ }
+    }
+  }
+
+  // Generate small thumbnails for page selection (up to maxThumbs pages)
+  async function pdfGetPageThumbnails(file, maxThumbs = 10) {
+    if (typeof pdfjsLib === 'undefined') {
+      throw new Error('PDF.jsライブラリが読み込まれていません。');
+    }
+    const arrayBuffer = await file.arrayBuffer();
+    let pdf;
+    try {
+      pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    } catch (e) {
+      if (e?.name === 'PasswordException') throw new Error('PDFがパスワード保護されています。');
+      throw e;
+    }
+    try {
+      const totalPages = pdf.numPages;
+      const n = Math.min(totalPages, maxThumbs);
+      const thumbs = [];
+      for (let i = 1; i <= n; i++) {
+        const page = await pdf.getPage(i);
+        const vp = page.getViewport({ scale: 1 });
+        const scale = Math.min(220 / vp.width, 160 / vp.height, 1);
+        const sv = page.getViewport({ scale });
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.floor(sv.width));
+        canvas.height = Math.max(1, Math.floor(sv.height));
+        const ctx = canvas.getContext('2d');
+        if (!ctx) continue;
+        try {
+          await page.render({ canvasContext: ctx, viewport: sv }).promise;
+          thumbs.push({ pageNumber: i, dataUrl: canvas.toDataURL('image/jpeg', 0.6) });
+        } finally {
+          canvas.width = 0; canvas.height = 0;
+        }
+      }
+      return { totalPages, thumbs, maxAnalyze: MAX_ANALYZE_PAGES };
+    } finally {
       try { await pdf.destroy(); } catch { /* noop */ }
     }
   }
@@ -1126,6 +1181,7 @@ ${(isKiso ? MANUAL_KISO_CHECKS : MANUAL_MOKUTEKICHI_CHECKS).map(c => `    "${c.i
     getCheckItems,
     buildPrompt,
     pdfToImages,
+    pdfGetPageThumbnails,
     pdfToPreview,
     testApiKey,
     checkModelAvailability,
